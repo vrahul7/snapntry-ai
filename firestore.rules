@@ -1,0 +1,20 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Users collection: read/write if authenticated and document ID matches user ID
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Products collection: read by any authenticated user; write/create/delete for setup/admin
+    match /products/{productId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
+    }
+    
+    // Try-Ons collection: read/write if authenticated and belongs to user
+    match /try_ons/{tryOnId} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

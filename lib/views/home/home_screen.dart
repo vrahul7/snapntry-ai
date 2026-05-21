@@ -16,13 +16,13 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  int _currentIndex = 1; // Default to Catalog view (tab 1)
+  int _currentIndex = 0; // Default to Home Feed (tab 0)
 
   final List<Widget> _screens = [
-    const ExploreScreen(), // Tab 0: Discover / Swipe
-    const CatalogScreen(), // Tab 1: Catalog List
+    const CatalogScreen(), // Tab 0: Home / Feed
+    const ExploreScreen(), // Tab 1: TikTok-style Swipe
     const TryOnScreen(),   // Tab 2: AI Try-On Studio
-    const ProfileScreen(), // Tab 3: Partner Settings
+    const ProfileScreen(), // Tab 3: Account Management
   ];
 
   @override
@@ -57,9 +57,9 @@ class _HomeScreenState extends State<HomeScreen> {
   String _getAppBarTitle(int index) {
     switch (index) {
       case 0:
-        return 'DISCOVER';
+        return 'GENA2Z B2B FEED';
       case 1:
-        return 'WHOLESALE CATALOG';
+        return 'EXPLORE SWIPE';
       case 2:
         return 'AI TRY-ON STUDIO';
       case 3:
@@ -93,10 +93,10 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildNavItem(index: 0, icon: Icons.compass_calibration_outlined, activeIcon: Icons.explore, label: 'Swipe'),
-                _buildNavItem(index: 1, icon: Icons.home_outlined, activeIcon: Icons.home_rounded, label: 'Feed'),
-                _buildNavItem(index: 2, icon: Icons.auto_awesome_outlined, activeIcon: Icons.auto_awesome_rounded, label: 'AI Try-On'),
-                _buildNavItem(index: 3, icon: Icons.person_outline_rounded, activeIcon: Icons.person_rounded, label: 'Profile'),
+                _buildNavItem(index: 0, icon: Icons.home_outlined, activeIcon: Icons.home_rounded, label: 'Home'),
+                _buildNavItem(index: 1, icon: Icons.explore_outlined, activeIcon: Icons.explore, label: 'Swipe'),
+                _buildNavItem(index: 2, icon: Icons.auto_awesome_outlined, activeIcon: Icons.auto_awesome_rounded, label: 'Try-On'),
+                _buildNavItem(index: 3, icon: Icons.person_outline_rounded, activeIcon: Icons.person_rounded, label: 'Account'),
               ],
             ),
           ),

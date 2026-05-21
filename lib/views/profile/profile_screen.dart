@@ -56,7 +56,7 @@ class ProfileScreen extends StatelessWidget {
             _buildProfileInfoItem(context, label: 'Primary Contact', value: user?.contactName ?? 'John Doe'),
             _buildProfileInfoItem(context, label: 'Billing Email Address', value: user?.email ?? 'partner@acme.com'),
             _buildProfileInfoItem(context, label: 'Account ID Ref', value: user?.uid ?? 'N/A'),
-            _buildProfileInfoItem(context, label: 'Current Credit Limit', value: '${user?.credits ?? 0} Credits'),
+            _buildProfileInfoItem(context, label: 'Try-On Status', value: 'Unlimited AI Checks'),
 
             const SizedBox(height: 32),
             SizedBox(

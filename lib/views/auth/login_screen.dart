@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../services/firebase_auth_service.dart';
+import '../../models/user_model.dart';
 import '../../config/theme.dart';
 import '../../config/routes.dart';
 
@@ -16,6 +18,25 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController(text: 'secret123');
   bool _isLoading = false;
   String? _errorMessage;
+  StreamSubscription<UserModel?>? _authSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _authSubscription = FirebaseAuthService().authStateChanges.listen((user) {
+      if (user != null && mounted) {
+        Navigator.pushReplacementNamed(context, AppRoutes.home);
+      }
+    });
+    // Check immediate current value as well
+    if (FirebaseAuthService().currentUser != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Navigator.pushReplacementNamed(context, AppRoutes.home);
+        }
+      });
+    }
+  }
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
@@ -48,6 +69,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   void dispose() {
+    _authSubscription?.cancel();
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
