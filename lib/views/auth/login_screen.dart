@@ -77,9 +77,9 @@ class _LoginScreenState extends State<LoginScreen> {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: AppTheme.primaryNeon.withOpacity(0.1),
+                    color: AppTheme.primaryNeon.withValues(alpha: 0.1),
                     shape: BoxShape.circle,
-                    border: Border.all(color: AppTheme.primaryNeon.withOpacity(0.3), width: 1.5),
+                    border: Border.all(color: AppTheme.primaryNeon.withValues(alpha: 0.3), width: 1.5),
                   ),
                   child: const Icon(
                     Icons.auto_awesome_mosaic_rounded,
@@ -104,7 +104,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 Container(
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
-                    color: AppTheme.darkCard.withOpacity(0.8),
+                    color: AppTheme.darkCard.withValues(alpha: 0.8),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(color: AppTheme.glassBorder, width: 1),
                   ),
@@ -117,9 +117,9 @@ class _LoginScreenState extends State<LoginScreen> {
                           Container(
                             padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                             decoration: BoxDecoration(
-                              color: Colors.redAccent.withOpacity(0.1),
+                              color: Colors.redAccent.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.redAccent.withOpacity(0.3)),
+                              border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
                             ),
                             child: Text(
                               _errorMessage!,

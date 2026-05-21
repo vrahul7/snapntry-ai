@@ -71,8 +71,8 @@ class _ExploreScreenState extends State<ExploreScreen> {
                       gradient: LinearGradient(
                         colors: [
                           Colors.transparent,
-                          Colors.black.withOpacity(0.5),
-                          Colors.black.withOpacity(0.9),
+                          Colors.black.withValues(alpha: 0.5),
+                          Colors.black.withValues(alpha: 0.9),
                         ],
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
@@ -91,7 +91,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
-                            color: AppTheme.primaryNeon.withOpacity(0.8),
+                            color: AppTheme.primaryNeon.withValues(alpha: 0.8),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: const Text(
@@ -162,7 +162,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                         // Buy/Cart Action
                         _buildFloatingActionButton(
                           icon: Icons.shopping_bag_outlined,
-                          color: Colors.white.withOpacity(0.1),
+                          color: Colors.white.withValues(alpha: 0.1),
                           label: 'Buy',
                           onTap: () {
                             ScaffoldMessenger.of(context).showSnackBar(
@@ -178,7 +178,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                         // Save Action
                         _buildFloatingActionButton(
                           icon: Icons.bookmark_border_rounded,
-                          color: Colors.white.withOpacity(0.1),
+                          color: Colors.white.withValues(alpha: 0.1),
                           label: 'Save',
                           onTap: () {
                             ScaffoldMessenger.of(context).showSnackBar(
@@ -219,7 +219,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
               border: Border.all(color: Colors.white24, width: 1),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.3),
+                  color: Colors.black.withValues(alpha: 0.3),
                   blurRadius: 8,
                   offset: const Offset(0, 4),
                 ),

@@ -83,10 +83,10 @@ class _HomeScreenState extends State<HomeScreen> {
           filter: ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0), // frosted glass blur
           child: Container(
             decoration: BoxDecoration(
-              color: AppTheme.darkCard.withOpacity(0.7),
+              color: AppTheme.darkCard.withValues(alpha: 0.7),
               borderRadius: BorderRadius.circular(30),
               border: Border.all(
-                color: Colors.white.withOpacity(0.08),
+                color: Colors.white.withValues(alpha: 0.08),
                 width: 1.5,
               ),
             ),

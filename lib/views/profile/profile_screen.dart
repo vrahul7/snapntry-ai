@@ -20,7 +20,7 @@ class ProfileScreen extends StatelessWidget {
                 children: [
                   CircleAvatar(
                     radius: 40,
-                    backgroundColor: AppTheme.secondaryNeon.withOpacity(0.1),
+                    backgroundColor: AppTheme.secondaryNeon.withValues(alpha: 0.1),
                     child: const Icon(
                       Icons.account_balance_rounded,
                       size: 40,
