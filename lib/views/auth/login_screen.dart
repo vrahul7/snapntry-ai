@@ -14,8 +14,8 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController(text: 'partner@acme.com');
-  final _passwordController = TextEditingController(text: 'secret123');
+  final _emailController = TextEditingController(text: 'vgrahul7@gmail.com');
+  final _passwordController = TextEditingController(text: '12345679');
   bool _isLoading = false;
   String? _errorMessage;
   StreamSubscription<UserModel?>? _authSubscription;
