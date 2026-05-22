@@ -43,3 +43,14 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Python Virtual Environments, Caches, and checkpoints
+tryon_pipeline/.venv/
+tryon_pipeline/__pycache__/
+tryon_pipeline/dummy_data/
+tryon_pipeline/checkpoints/
+tryon_pipeline/*.png
+tryon_pipeline/*.jpg
+tryon_pipeline/*.jpeg
+tryon_pipeline/*.log
+
