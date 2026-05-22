@@ -67,10 +67,24 @@ class FirebaseAuthService {
   Future<UserModel?> signInWithEmailAndPassword(String email, String password) async {
     if (isFirebaseEnabled) {
       try {
-        final credential = await fb_auth.FirebaseAuth.instance.signInWithEmailAndPassword(
-          email: email,
-          password: password,
-        );
+        fb_auth.UserCredential credential;
+        try {
+          credential = await fb_auth.FirebaseAuth.instance.signInWithEmailAndPassword(
+            email: email,
+            password: password,
+          );
+        } on fb_auth.FirebaseAuthException catch (authEx) {
+          // Auto-register new users on first login attempt to make B2B demo frictionless
+          try {
+            credential = await fb_auth.FirebaseAuth.instance.createUserWithEmailAndPassword(
+              email: email,
+              password: password,
+            );
+          } catch (signupEx) {
+            // If signup fails (e.g., because email is in use but password was wrong), throw the original auth error
+            throw authEx;
+          }
+        }
         final fbUser = credential.user;
         if (fbUser != null) {
           // Fetch or create profile

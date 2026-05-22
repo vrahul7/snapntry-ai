@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "722853690058",
+    "project_id": "b2b-gena2z-prod-8898",
+    "storage_bucket": "b2b-gena2z-prod-8898.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:722853690058:android:fb4e8ce9f605535da49233",
+        "android_client_info": {
+          "package_name": "com.gena2z.b2b_gena2z"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD5FQb3X_sLP93LNg-W6dLz_PWC-1bWgYU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -78,49 +78,53 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Color(0xFF0A0A0E),
-              Color(0xFF14142B),
-            ],
-          ),
-        ),
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // Glowing B2B Logo Header
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppTheme.primaryNeon.withValues(alpha: 0.1),
+      backgroundColor: AppTheme.darkBg,
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Glowing Instagram-Style Logo Header
+              Container(
+                width: 96,
+                height: 96,
+                padding: const EdgeInsets.all(4),
+                decoration: const BoxDecoration(
+                  gradient: AppTheme.instagramGradient,
+                  shape: BoxShape.circle,
+                ),
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: const BoxDecoration(
+                    color: AppTheme.darkBg,
                     shape: BoxShape.circle,
-                    border: Border.all(color: AppTheme.primaryNeon.withValues(alpha: 0.3), width: 1.5),
                   ),
-                  child: const Icon(
-                    Icons.auto_awesome_mosaic_rounded,
-                    size: 48,
-                    color: AppTheme.primaryNeon,
+                  child: ClipOval(
+                    child: Image.asset(
+                      'assets/images/logo.png',
+                      fit: BoxFit.cover,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 24),
-                Text(
-                  'GenA2Z B2B Portal',
-                  style: Theme.of(context).textTheme.headlineLarge,
+              ),
+              const SizedBox(height: 24),
+              Text(
+                'SnapnTry AI',
+                style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: -0.5,
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  'Access your executive catalog and wholesale orders',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                  textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Try on any apparel instantly with AI',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: AppTheme.textSecondary,
                 ),
-                const SizedBox(height: 40),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 40),
 
                 // Glassmorphic Login Card
                 Container(
@@ -172,18 +176,33 @@ class _LoginScreenState extends State<LoginScreen> {
                           validator: (val) => (val == null || val.length < 6) ? 'Password must exceed 5 characters' : null,
                         ),
                         const SizedBox(height: 24),
-                        ElevatedButton(
-                          onPressed: _isLoading ? null : _submit,
-                          child: _isLoading
-                              ? const SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        Container(
+                          decoration: BoxDecoration(
+                            gradient: _isLoading ? null : AppTheme.instagramGradient,
+                            color: _isLoading ? AppTheme.darkCard : null,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: ElevatedButton(
+                            onPressed: _isLoading ? null : _submit,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.transparent,
+                              shadowColor: Colors.transparent,
+                              minimumSize: const Size(double.infinity, 54),
+                            ),
+                            child: _isLoading
+                                ? const SizedBox(
+                                    height: 20,
+                                    width: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                    ),
+                                  )
+                                : const Text(
+                                    'Enter Partner Portal',
+                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                                   ),
-                                )
-                              : const Text('Enter Partner Portal'),
+                          ),
                         ),
                       ],
                     ),
@@ -193,7 +212,6 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ),
         ),
-      ),
-    );
+      );
   }
 }

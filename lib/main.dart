@@ -16,5 +16,5 @@ void main() async {
     debugPrint('Running app in Offline Mock Hybrid mode.');
   }
 
-  runApp(const GenA2ZApp());
+  runApp(const SnapnTryApp());
 }

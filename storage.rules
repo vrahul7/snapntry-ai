@@ -1,12 +1,18 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    // User photos directory: read/write if authenticated
-    match /users/photos/{allPaths=**} {
-      allow read, write: if request.auth != null;
+    // User photos: only the owner can read or write
+    match /users/photos/{userId}/{allPaths=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
     }
     
-    // Products directory: read for authenticated, write for admin/auth
+    // Try-on results: only the owner can read; client-side write is blocked (only Cloud Functions Admin SDK can write)
+    match /try_ons/results/{userId}/{allPaths=**} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if false;
+    }
+    
+    // Products directory: read/write for authenticated users (write allowed for catalog seeding)
     match /products/{allPaths=**} {
       allow read: if request.auth != null;
       allow write: if request.auth != null;

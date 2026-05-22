@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'config/theme.dart';
 import 'config/routes.dart';
 
-class GenA2ZApp extends StatelessWidget {
-  const GenA2ZApp({super.key});
+class SnapnTryApp extends StatelessWidget {
+  const SnapnTryApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'B2B GenA2Z',
+      title: 'SnapnTry AI',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
       initialRoute: AppRoutes.login,

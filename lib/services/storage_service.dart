@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart' as fb_storage;
+import 'package:firebase_auth/firebase_auth.dart' as fb_auth;
 
 class StorageService {
   static final StorageService _instance = StorageService._internal();
@@ -15,8 +16,9 @@ class StorageService {
   Future<String> uploadUserPhoto(String filePath) async {
     if (isFirebaseEnabled) {
       try {
+        final userId = fb_auth.FirebaseAuth.instance.currentUser?.uid ?? 'anonymous';
         final fileName = 'user_photo_${DateTime.now().millisecondsSinceEpoch}.jpg';
-        final ref = fb_storage.FirebaseStorage.instance.ref().child('users/photos/$fileName');
+        final ref = fb_storage.FirebaseStorage.instance.ref().child('users/photos/$userId/$fileName');
         
         if (kIsWeb) {
           // Web fallback since File(path) is not supported, return standard mock

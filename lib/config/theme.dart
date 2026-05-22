@@ -1,14 +1,29 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  // Ultra-premium Color Palette
-  static const Color darkBg = Color(0xFF0F0F13);
-  static const Color darkCard = Color(0xFF1B1B22);
-  static const Color primaryNeon = Color(0xFF6366F1); // Vivid Indigo
-  static const Color secondaryNeon = Color(0xFF06B6D4); // Cyan Accent
-  static const Color textPrimary = Color(0xFFF3F4F6);
-  static const Color textSecondary = Color(0xFF9CA3AF);
-  static const Color glassBorder = Color(0x1AFFFFFF);
+  // Instagram Premium Color Palette
+  static const Color darkBg = Color(0xFF000000); // Pure Black
+  static const Color darkCard = Color(0xFF121212); // Charcoal Card
+  static const Color primaryNeon = Color(0xFFE1306C); // Instagram Pink/Magenta
+  static const Color secondaryNeon = Color(0xFF0095F6); // Instagram Active Blue
+  static const Color textPrimary = Color(0xFFFFFFFF); // Pure White
+  static const Color textSecondary = Color(0xFFA8A8A8); // Instagram Muted Gray
+  static const Color glassBorder = Color(0xFF262626); // Instagram Thin Border
+
+  // Instagram Brand Gradient Colors
+  static const List<Color> instagramGradientColors = [
+    Color(0xFF833AB4), // Purple
+    Color(0xFFC13584), // Magenta
+    Color(0xFFE1306C), // Pink
+    Color(0xFFF77737), // Orange
+    Color(0xFFFCAF45), // Yellow
+  ];
+
+  static const Gradient instagramGradient = LinearGradient(
+    colors: instagramGradientColors,
+    begin: Alignment.bottomLeft,
+    end: Alignment.topRight,
+  );
 
   // Modern Dark Theme
   static ThemeData get darkTheme {

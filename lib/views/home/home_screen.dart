@@ -57,15 +57,15 @@ class _HomeScreenState extends State<HomeScreen> {
   String _getAppBarTitle(int index) {
     switch (index) {
       case 0:
-        return 'GENA2Z B2B FEED';
+        return 'SNAPNTRY AI FEED';
       case 1:
         return 'EXPLORE SWIPE';
       case 2:
         return 'AI TRY-ON STUDIO';
       case 3:
-        return 'PARTNER ACCOUNT';
+        return 'MY ACCOUNT';
       default:
-        return 'GENA2Z';
+        return 'SnapnTry AI';
     }
   }
 

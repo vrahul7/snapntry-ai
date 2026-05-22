@@ -1,7 +1,12 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import '../../config/theme.dart';
 import '../../services/firebase_auth_service.dart';
 import '../../services/firestore_service.dart';
+import '../../services/storage_service.dart';
 
 class TryOnScreen extends StatefulWidget {
   const TryOnScreen({super.key});
@@ -17,6 +22,7 @@ class _TryOnScreenState extends State<TryOnScreen> {
   // Selected State
   String _selectedApparelTitle = 'Tech Jacket Pro';
   String _selectedApparelImage = 'https://images.unsplash.com/photo-1551028719-00167b16eac5?w=200';
+  String _selectedApparelCategory = 'upper_body';
   String _selectedModelTitle = 'Model Alpha';
   String _selectedModelImage = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200';
 
@@ -73,54 +79,269 @@ class _TryOnScreenState extends State<TryOnScreen> {
     },
   ];
 
+  Widget _buildImageWidget(String path, {double? width, double? height, BoxFit fit = BoxFit.cover}) {
+    if (path.startsWith('http') || path.startsWith('blob:') || kIsWeb) {
+      return Image.network(
+        path,
+        width: width,
+        height: height,
+        fit: fit,
+        errorBuilder: (context, error, stackTrace) =>
+            const Icon(Icons.broken_image, color: AppTheme.textSecondary),
+      );
+    } else {
+      return Image.file(
+        File(path),
+        width: width,
+        height: height,
+        fit: fit,
+        errorBuilder: (context, error, stackTrace) =>
+            const Icon(Icons.broken_image, color: AppTheme.textSecondary),
+      );
+    }
+  }
+
+  Future<String?> _showCategorySelectionDialog() {
+    return showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: AppTheme.darkCard,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: AppTheme.glassBorder),
+          ),
+          title: const Text(
+            'Select Apparel Type',
+            style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.bold, fontSize: 18),
+            textAlign: TextAlign.center,
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Help the AI understand where to fit this garment on the model.',
+                style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 20),
+              _buildCategoryDialogOption(context, 'Tops / Shirts / Jackets', 'upper_body'),
+              const SizedBox(height: 10),
+              _buildCategoryDialogOption(context, 'Pants / Shorts / Skirts', 'lower_body'),
+              const SizedBox(height: 10),
+              _buildCategoryDialogOption(context, 'Dresses / One-Pieces', 'one_piece'),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, null),
+              child: const Text('Cancel', style: TextStyle(color: Colors.redAccent)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildCategoryDialogOption(BuildContext context, String title, String categoryValue) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: AppTheme.darkBg,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppTheme.glassBorder),
+      ),
+      child: TextButton(
+        onPressed: () => Navigator.pop(context, categoryValue),
+        child: Text(
+          title,
+          style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600),
+        ),
+      ),
+    );
+  }
+
+  void _pickCustomApparel() async {
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+      if (image == null) return;
+
+      // Ask for apparel category immediately
+      final String? selectedCategory = await _showCategorySelectionDialog();
+      if (selectedCategory == null) return; // User cancelled
+
+      setState(() {
+        _isProcessing = true;
+      });
+
+      String apparelImageUrl;
+      if (StorageService().isFirebaseEnabled) {
+        apparelImageUrl = await StorageService().uploadUserPhoto(image.path);
+      } else {
+        apparelImageUrl = image.path;
+      }
+
+      setState(() {
+        _selectedApparelTitle = 'Custom Apparel';
+        _selectedApparelImage = apparelImageUrl;
+        _selectedApparelCategory = selectedCategory;
+        _isProcessing = false;
+        _generatedImageUrl = null;
+      });
+    } catch (e) {
+      debugPrint('Error picking custom apparel: $e');
+      setState(() {
+        _isProcessing = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error selecting apparel: $e')),
+        );
+      }
+    }
+  }
+
+  void _pickCustomPhoto() async {
+    try {
+      final ImagePicker picker = ImagePicker();
+      final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+      if (image == null) return;
+
+      setState(() {
+        _isProcessing = true;
+      });
+
+      String modelImageUrl;
+      if (StorageService().isFirebaseEnabled) {
+        modelImageUrl = await StorageService().uploadUserPhoto(image.path);
+      } else {
+        modelImageUrl = image.path;
+      }
+
+      setState(() {
+        _selectedModelTitle = 'Custom Photo';
+        _selectedModelImage = modelImageUrl;
+        _isProcessing = false;
+        _generatedImageUrl = null;
+      });
+    } catch (e) {
+      debugPrint('Error picking custom photo: $e');
+      setState(() {
+        _isProcessing = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error selecting photo: $e')),
+        );
+      }
+    }
+  }
+
   void _triggerTryOn() async {
     setState(() {
       _isProcessing = true;
       _generatedImageUrl = null;
     });
 
-    // Simulate Cloud Function / Vertex AI inference processing latency
-    await Future.delayed(const Duration(seconds: 3));
+    final isFirebaseEnabled = StorageService().isFirebaseEnabled;
 
-    // Map selected to specific results to make demo look realistic
-    String mockResult = 'https://images.unsplash.com/photo-1469334031218-e382a71b716b?w=500';
-    if (_selectedApparelTitle == 'Tech Jacket Pro') {
-      mockResult = 'https://images.unsplash.com/photo-1496747611176-843222e1e57c?w=500';
-    } else if (_selectedApparelTitle == 'Silk Evening Dress') {
-      mockResult = 'https://images.unsplash.com/photo-1529139574466-a303027c1d8b?w=500';
-    } else if (_selectedApparelTitle == 'Urban Cargo Pants') {
-      mockResult = 'https://images.unsplash.com/photo-1501196354995-cbb51c65aaea?w=500';
-    } else if (_selectedApparelTitle == 'Premium Linen Shirt') {
-      mockResult = 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=500';
-    }
-
-    final currentUser = FirebaseAuthService().currentUser;
-    final userId = currentUser?.uid ?? 'mock_uid_12345';
-    // Async log transaction to firestore
-    FirestoreService().logTryOnTransaction(
-      userId: userId,
-      apparelId: _selectedApparelTitle.toLowerCase().replaceAll(' ', '_'),
-      apparelTitle: _selectedApparelTitle,
-      apparelImageUrl: _selectedApparelImage,
-      userPhotoUrl: _selectedModelImage,
-      resultImageUrl: mockResult,
-      status: 'success',
-    );
-
-    if (mounted) {
-      setState(() {
-        _isProcessing = false;
-        _generatedImageUrl = mockResult;
-        
-        // Add to recent try-ons history
-        _recentTryOns.insert(0, {
-          'apparelTitle': _selectedApparelTitle,
+    if (isFirebaseEnabled) {
+      try {
+        final category = _selectedApparelCategory;
+        final HttpsCallable callable = FirebaseFunctions.instance.httpsCallable('generateTryOn');
+        final result = await callable.call<Map<String, dynamic>>(<String, dynamic>{
+          'personImage': _selectedModelImage,
           'apparelImage': _selectedApparelImage,
-          'modelTitle': _selectedModelTitle,
-          'modelImage': _selectedModelImage,
-          'resultImage': mockResult,
+          'apparelTitle': _selectedApparelTitle,
+          'category': category,
         });
-      });
+
+        final data = result.data;
+        final outputUrl = data['outputUrl'] as String;
+
+        final currentUser = FirebaseAuthService().currentUser;
+        final userId = currentUser?.uid ?? 'mock_uid_12345';
+        
+        await FirestoreService().logTryOnTransaction(
+          userId: userId,
+          apparelId: _selectedApparelTitle.toLowerCase().replaceAll(' ', '_'),
+          apparelTitle: _selectedApparelTitle,
+          apparelImageUrl: _selectedApparelImage,
+          userPhotoUrl: _selectedModelImage,
+          resultImageUrl: outputUrl,
+          status: 'success',
+        );
+
+        if (mounted) {
+          setState(() {
+            _isProcessing = false;
+            _generatedImageUrl = outputUrl;
+            
+            _recentTryOns.insert(0, {
+              'apparelTitle': _selectedApparelTitle,
+              'apparelImage': _selectedApparelImage,
+              'modelTitle': _selectedModelTitle,
+              'modelImage': _selectedModelImage,
+              'resultImage': outputUrl,
+            });
+          });
+        }
+      } catch (e) {
+        debugPrint('Vertex AI try-on function execution error: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error generating try-on: $e')),
+          );
+          setState(() {
+            _isProcessing = false;
+          });
+        }
+      }
+    } else {
+      await Future.delayed(const Duration(seconds: 3));
+
+      String mockResult = 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=500';
+      if (_selectedApparelTitle == 'Tech Jacket Pro') {
+        mockResult = 'https://images.unsplash.com/photo-1496747611176-843222e1e57c?w=500';
+      } else if (_selectedApparelTitle == 'Silk Evening Dress') {
+        mockResult = 'https://images.unsplash.com/photo-1529139574466-a303027c1d8b?w=500';
+      } else if (_selectedApparelTitle == 'Urban Cargo Pants') {
+        mockResult = 'https://images.unsplash.com/photo-1501196354995-cbb51c65aaea?w=500';
+      } else if (_selectedApparelTitle == 'Premium Linen Shirt') {
+        mockResult = 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=500';
+      } else if (_selectedApparelTitle == 'Custom Apparel') {
+        mockResult = 'https://images.unsplash.com/photo-1469334031218-e382a71b716b?w=500';
+      }
+
+      final currentUser = FirebaseAuthService().currentUser;
+      final userId = currentUser?.uid ?? 'mock_uid_12345';
+      
+      FirestoreService().logTryOnTransaction(
+        userId: userId,
+        apparelId: _selectedApparelTitle.toLowerCase().replaceAll(' ', '_'),
+        apparelTitle: _selectedApparelTitle,
+        apparelImageUrl: _selectedApparelImage,
+        userPhotoUrl: _selectedModelImage,
+        resultImageUrl: mockResult,
+        status: 'success',
+      );
+
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+          _generatedImageUrl = mockResult;
+          
+          _recentTryOns.insert(0, {
+            'apparelTitle': _selectedApparelTitle,
+            'apparelImage': _selectedApparelImage,
+            'modelTitle': _selectedModelTitle,
+            'modelImage': _selectedModelImage,
+            'resultImage': mockResult,
+          });
+        });
+      }
     }
   }
 
@@ -139,13 +360,29 @@ class _TryOnScreenState extends State<TryOnScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Select Apparel Product',
-                  style: TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Select Apparel Product',
+                      style: TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _pickCustomApparel();
+                      },
+                      icon: const Icon(Icons.add_a_photo_rounded, color: AppTheme.primaryNeon, size: 18),
+                      label: const Text(
+                        'Upload Custom',
+                        style: TextStyle(color: AppTheme.primaryNeon, fontSize: 13, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 16),
                 SizedBox(
@@ -161,6 +398,13 @@ class _TryOnScreenState extends State<TryOnScreen> {
                           setState(() {
                             _selectedApparelTitle = item['title']!;
                             _selectedApparelImage = item['image']!;
+                            if (_selectedApparelTitle == 'Silk Evening Dress') {
+                              _selectedApparelCategory = 'one_piece';
+                            } else if (_selectedApparelTitle == 'Urban Cargo Pants') {
+                              _selectedApparelCategory = 'lower_body';
+                            } else {
+                              _selectedApparelCategory = 'upper_body';
+                            }
                             _generatedImageUrl = null;
                           });
                           Navigator.pop(context);
@@ -231,13 +475,29 @@ class _TryOnScreenState extends State<TryOnScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Select Target Model',
-                  style: TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      'Select Target Model',
+                      style: TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _pickCustomPhoto();
+                      },
+                      icon: const Icon(Icons.add_a_photo_rounded, color: AppTheme.primaryNeon, size: 18),
+                      label: const Text(
+                        'Upload Custom',
+                        style: TextStyle(color: AppTheme.primaryNeon, fontSize: 13, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 16),
                 SizedBox(
@@ -322,7 +582,7 @@ class _TryOnScreenState extends State<TryOnScreen> {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Mix apparel collections with partner target models instantly.',
+              'Mix collections or upload your own garments to try them on instantly.',
               style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
             ),
             const SizedBox(height: 20),
@@ -435,12 +695,25 @@ class _TryOnScreenState extends State<TryOnScreen> {
                     ],
                   ),
                   const SizedBox(height: 20),
-                  SizedBox(
+                  Container(
                     width: double.infinity,
+                    decoration: BoxDecoration(
+                      gradient: _isProcessing ? null : AppTheme.instagramGradient,
+                      color: _isProcessing ? AppTheme.darkCard : null,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                     child: ElevatedButton.icon(
                       onPressed: _isProcessing ? null : _triggerTryOn,
-                      icon: const Icon(Icons.auto_awesome_rounded),
-                      label: Text(_isProcessing ? 'Generating AI Fit...' : 'Generate Virtual Try-On'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.transparent,
+                        shadowColor: Colors.transparent,
+                        minimumSize: const Size(double.infinity, 54),
+                      ),
+                      icon: const Icon(Icons.auto_awesome_rounded, color: Colors.white),
+                      label: Text(
+                        _isProcessing ? 'Generating AI Fit...' : 'Generate Virtual Try-On',
+                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
                     ),
                   ),
                 ],
@@ -522,13 +795,11 @@ class _TryOnScreenState extends State<TryOnScreen> {
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(8),
-            child: Image.network(
+            child: _buildImageWidget(
               imageUrl,
               height: 80,
               width: 80,
               fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) =>
-                  const Icon(Icons.broken_image, size: 40, color: AppTheme.textSecondary),
             ),
           ),
           const SizedBox(height: 8),
