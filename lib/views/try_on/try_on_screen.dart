@@ -9,6 +9,8 @@ import '../../services/firebase_auth_service.dart';
 import '../../services/firestore_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/try_on_state.dart';
+import 'size_advisor_panel.dart';
+import 'complete_look_row.dart';
 
 class TryOnScreen extends StatefulWidget {
   const TryOnScreen({super.key});
@@ -1180,6 +1182,14 @@ class _TryOnScreenState extends State<TryOnScreen>
                       ),
                     ],
                   ),
+
+                  // ── AI Size Advisor Panel (shown when model photo is selected) ──
+                  if (_selectedModelImage.isNotEmpty)
+                    SizeAdvisorPanel(
+                      modelImageUrl: _selectedModelImage,
+                      apparelTitle: _selectedApparelTitle,
+                    ),
+
                   const SizedBox(height: 12),
                   // Body check status indicator
                   if (_isCheckingVisibility)
@@ -1388,6 +1398,14 @@ class _TryOnScreenState extends State<TryOnScreen>
                 ),
               ),
             ),
+
+            // ── Complete the Look section (shown after a result is generated) ──
+            if (_generatedImageUrl != null)
+              CompleteLookRow(
+                currentApparelTitle: _selectedApparelTitle,
+                currentApparelCategory: _selectedApparelCategory,
+              ),
+
             // Bottom padding to clear floating glassmorphic nav bar (90px + 24px margin + 16px extra)
             const SizedBox(height: 140),
           ],

@@ -3,6 +3,7 @@ import '../../services/firestore_service.dart';
 import '../../config/theme.dart';
 import '../../config/routes.dart';
 import '../../services/try_on_state.dart';
+import 'visual_search_delegate.dart';
 
 class CatalogScreen extends StatefulWidget {
   const CatalogScreen({super.key});
@@ -184,27 +185,55 @@ class _CatalogScreenState extends State<CatalogScreen> {
         children: [
           // Elegant search bar mock
           Expanded(
-            child: Container(
-              height: 48,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: BoxDecoration(
-                color: AppTheme.darkCard,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppTheme.glassBorder, width: 1),
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.search_rounded, color: AppTheme.textSecondary, size: 20),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Search corporate collections...',
-                      style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+            child: GestureDetector(
+              onTap: () {
+                // Future: open keyboard search
+              },
+              child: Container(
+                height: 48,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                decoration: BoxDecoration(
+                  color: AppTheme.darkCard,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppTheme.glassBorder, width: 1),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.search_rounded, color: AppTheme.textSecondary, size: 20),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Text(
+                        'Search collections...',
+                        style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                  ),
-                ],
+                    // AI Visual Search camera button
+                    GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const VisualSearchScreen(),
+                          ),
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primaryNeon.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          Icons.camera_alt_rounded,
+                          color: AppTheme.primaryNeon,
+                          size: 18,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
