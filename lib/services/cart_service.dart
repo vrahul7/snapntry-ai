@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'analytics_service.dart';
 
 /// Cart item model
 class CartItem {
@@ -80,6 +81,19 @@ class CartService {
     required String sku,
     int quantity = 1,
   }) async {
+    // Log addToCart event in analytics
+    try {
+      final parsedPrice = double.tryParse(price.replaceAll(RegExp(r'[^0-9.]'), '')) ?? 0.0;
+      AnalyticsService().logAddToCart(
+        productId: productId,
+        name: title,
+        price: parsedPrice,
+        quantity: quantity,
+      );
+    } catch (e) {
+      debugPrint('Failed to log addToCart event: $e');
+    }
+
     // Check if already in local cart
     final existing = _localCart.indexWhere((c) => c.productId == productId);
     if (existing != -1) {

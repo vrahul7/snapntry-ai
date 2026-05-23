@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'analytics_service.dart';
 
 /// Wishlist item model
 class WishlistItem {
@@ -97,6 +98,18 @@ class WishlistService {
     required String price,
     required String sku,
   }) async {
+    // Log addToWishlist event in analytics
+    try {
+      final parsedPrice = double.tryParse(price.replaceAll(RegExp(r'[^0-9.]'), '')) ?? 0.0;
+      AnalyticsService().logAddToWishlist(
+        productId: productId,
+        name: title,
+        price: parsedPrice,
+      );
+    } catch (e) {
+      debugPrint('Failed to log addToWishlist event: $e');
+    }
+
     if (isWishlisted(productId)) return;
     final item = WishlistItem(
       productId: productId,

@@ -9,6 +9,7 @@ import '../../services/firebase_auth_service.dart';
 import '../../services/firestore_service.dart';
 import '../../services/storage_service.dart';
 import '../../services/try_on_state.dart';
+import '../../services/analytics_service.dart';
 import 'size_advisor_panel.dart';
 import 'complete_look_row.dart';
 
@@ -722,9 +723,18 @@ class _TryOnScreenState extends State<TryOnScreen>
         final outputUrl = data['outputUrl'] as String;
         final currentUser = FirebaseAuthService().currentUser;
         final userId = currentUser?.uid ?? 'mock_uid_12345';
+        final apparelId = _selectedApparelTitle.toLowerCase().replaceAll(' ', '_');
+
+        // Log successful try-on event
+        AnalyticsService().logTryOnEvent(
+          apparelId: apparelId,
+          category: category,
+          success: true,
+        );
+
         await FirestoreService().logTryOnTransaction(
           userId: userId,
-          apparelId: _selectedApparelTitle.toLowerCase().replaceAll(' ', '_'),
+          apparelId: apparelId,
           apparelTitle: _selectedApparelTitle,
           apparelImageUrl: _selectedApparelImage,
           userPhotoUrl: _selectedModelImage,
@@ -748,6 +758,14 @@ class _TryOnScreenState extends State<TryOnScreen>
         }
       } catch (e) {
         debugPrint('Vertex AI try-on function execution error: $e');
+
+        // Log failed try-on event
+        AnalyticsService().logTryOnEvent(
+          apparelId: _selectedApparelTitle.toLowerCase().replaceAll(' ', '_'),
+          category: _selectedApparelCategory,
+          success: false,
+        );
+
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Error generating try-on: $e')));

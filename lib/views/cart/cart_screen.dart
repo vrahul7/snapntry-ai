@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../config/theme.dart';
 import '../../services/cart_service.dart';
+import '../../services/analytics_service.dart';
 
 /// Full cart screen — shows all added items, quantity controls, and place order CTA.
 class CartScreen extends StatefulWidget {
@@ -50,6 +51,26 @@ class _CartScreenState extends State<CartScreen> {
 
   Future<void> _placeOrder() async {
     setState(() => _isPlacingOrder = true);
+    
+    // Log purchase event in analytics before clearing the cart
+    try {
+      final total = _subtotal;
+      final cartItemsMap = _items.map((item) => {
+        'id': item.productId,
+        'name': item.title,
+        'price': double.tryParse(item.price.replaceAll(RegExp(r'[^\d.]'), '')) ?? 0.0,
+        'quantity': item.quantity,
+      }).toList();
+      
+      AnalyticsService().logPurchase(
+        transactionId: 'txn_${DateTime.now().millisecondsSinceEpoch}',
+        cartItems: cartItemsMap,
+        total: total,
+      );
+    } catch (e) {
+      debugPrint('Failed to log purchase event: $e');
+    }
+
     await Future.delayed(const Duration(seconds: 2)); // Simulate order placement
     await _cartService.clearCart();
     if (mounted) {

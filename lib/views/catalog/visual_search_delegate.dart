@@ -8,6 +8,7 @@ import '../../config/theme.dart';
 import '../../services/try_on_state.dart';
 import '../../services/cart_service.dart';
 import '../../services/firestore_service.dart';
+import '../../services/analytics_service.dart';
 
 /// Visual Search Screen — lets users snap or upload a clothing photo to search
 /// the catalog using Gemini Vision via the `searchCatalogByImage` Cloud Function.
@@ -103,6 +104,9 @@ class _VisualSearchScreenState extends State<VisualSearchScreen>
       final rawKeywords = data['keywords'] as List<dynamic>? ?? [];
       final rawGarmentInfo = data['garmentInfo'] as Map<dynamic, dynamic>?;
 
+      // Log successful visual search event
+      AnalyticsService().logVisualSearch(success: true);
+
       if (mounted) {
         setState(() {
           _results = rawProducts
@@ -118,6 +122,10 @@ class _VisualSearchScreenState extends State<VisualSearchScreen>
       }
     } catch (e) {
       debugPrint('Cloud Function search failed ($e), using local fallback...');
+      
+      // Log failed visual search event (which triggers local fallback)
+      AnalyticsService().logVisualSearch(success: false);
+
       // ── LOCAL FALLBACK: keyword-match against local catalog ──────────────────
       await _runLocalSearch();
     }

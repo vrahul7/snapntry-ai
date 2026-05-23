@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'app.dart';
 import 'services/cache_service.dart';
+import 'services/analytics_service.dart';
 import 'firebase_options.dart';
 
 void main() async {
@@ -14,6 +15,9 @@ void main() async {
       options: DefaultFirebaseOptions.currentPlatform,
     );
     debugPrint('Firebase successfully initialized.');
+    
+    // Initialize Firebase Analytics
+    AnalyticsService().init();
   } catch (e) {
     debugPrint('Firebase initialization failed/skipped: $e');
     debugPrint('Running app in Offline Mock Hybrid mode.');
