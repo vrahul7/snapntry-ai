@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from PIL import Image
 import numpy as np
+import cv2
 from diffusers import DDIMScheduler, AutoencoderKL, UNet2DConditionModel
 from transformers import CLIPTextModel, CLIPTokenizer
 
@@ -16,7 +17,7 @@ try:
         generate_body_agnostic_mask,
         estimate_pose_guidance
     )
-    from model import patch_unet_for_vton, get_tiny_unet_for_testing
+    from model import load_catvton_unet, freeze_unet_for_vton, get_tiny_unet_for_testing
 except ImportError:
     from .preprocess import (
         resize_and_pad,
@@ -24,7 +25,7 @@ except ImportError:
         generate_body_agnostic_mask,
         estimate_pose_guidance
     )
-    from .model import patch_unet_for_vton, get_tiny_unet_for_testing
+    from .model import load_catvton_unet, freeze_unet_for_vton, get_tiny_unet_for_testing
 
 def parse_args():
     parser = argparse.ArgumentParser(description="End-to-End VTON Inference Script")
@@ -35,10 +36,63 @@ def parse_args():
     parser.add_argument("--pretrained_model_name", type=str, default="runwayml/stable-diffusion-inpainting")
     parser.add_argument("--output_path", type=str, default="./output_tryon.png", help="Path to save result image")
     parser.add_argument("--num_inference_steps", type=int, default=30)
-    parser.add_argument("--guidance_scale", type=float, default=7.5)
+    parser.add_argument("--guidance_scale", type=float, default=2.5) # Cat-VTON typically uses lower guidance scale or 2.5
     parser.add_argument("--mixed_precision", type=str, default="fp16", choices=["no", "fp16", "bf16"])
     parser.add_argument("--mock", action="store_true", help="Run in mock mode using a tiny local network")
     return parser.parse_args()
+
+def laplacian_pyramid_blend(img1: np.ndarray, img2: np.ndarray, mask: np.ndarray, num_levels: int = 4) -> np.ndarray:
+    """
+    Blends img1 (generated try-on result) and img2 (original person image)
+    using a Laplacian pyramid guided by mask (1 where try-on occurs, 0 elsewhere).
+    Inputs:
+        img1: float32 array, shape [H, W, 3], range [0, 1]
+        img2: float32 array, shape [H, W, 3], range [0, 1]
+        mask: float32 array, shape [H, W], range [0, 1]
+    """
+    h, w, c = img1.shape
+    
+    # 1. Generate Gaussian pyramids
+    gp1 = [img1.astype(np.float32)]
+    gp2 = [img2.astype(np.float32)]
+    gpm = [mask.astype(np.float32)]
+    
+    for i in range(num_levels):
+        gp1.append(cv2.pyrDown(gp1[-1]))
+        gp2.append(cv2.pyrDown(gp2[-1]))
+        gpm.append(cv2.pyrDown(gpm[-1]))
+        
+    # 2. Generate Laplacian pyramids
+    lp1 = [gp1[-1]]
+    lp2 = [gp2[-1]]
+    
+    for i in range(num_levels, 0, -1):
+        size = (gp1[i-1].shape[1], gp1[i-1].shape[0])
+        ge1 = cv2.pyrUp(gp1[i], dstsize=size)
+        ge2 = cv2.pyrUp(gp2[i], dstsize=size)
+        lp1.append(gp1[i-1] - ge1)
+        lp2.append(gp2[i-1] - ge2)
+        
+    # Reverse laplacian list to match levels
+    lp1.reverse()
+    lp2.reverse()
+    gpm.reverse()
+    
+    # 3. Blend pyramids at each level
+    blended_pyramid = []
+    for l1, l2, m in zip(lp1, lp2, gpm):
+        if len(m.shape) == 2:
+            m = np.expand_dims(m, axis=-1)
+        blended = m * l1 + (1.0 - m) * l2
+        blended_pyramid.append(blended)
+        
+    # 4. Reconstruct the image
+    reconstructed = blended_pyramid[-1]
+    for i in range(num_levels - 1, -1, -1):
+        size = (blended_pyramid[i].shape[1], blended_pyramid[i].shape[0])
+        reconstructed = cv2.pyrUp(reconstructed, dstsize=size) + blended_pyramid[i]
+        
+    return np.clip(reconstructed, 0.0, 1.0)
 
 @torch.no_grad()
 def main():
@@ -52,7 +106,7 @@ def main():
     person_pil = Image.open(args.person_path).convert("RGB")
     garment_pil = Image.open(args.garment_path).convert("RGB")
     
-    # Size inputs to model spec: 512x384
+    # Size inputs to model spec: 512x384 (height, width)
     target_size = (512, 384)
     person_img = resize_and_pad(person_pil, target_size)
     garment_img = resize_and_pad(garment_pil, target_size)
@@ -78,7 +132,7 @@ def main():
         print("--- Running in MOCK Mode ---")
         # Load a tiny UNet configuration
         unet = get_tiny_unet_for_testing()
-        unet = patch_unet_for_vton(unet)
+        unet = freeze_unet_for_vton(unet)
         
         # Load checkpoint if supplied
         if args.checkpoint_dir:
@@ -145,8 +199,8 @@ def main():
             print(f"Loading fine-tuned UNet weights from {args.checkpoint_dir}")
             unet = UNet2DConditionModel.from_pretrained(args.checkpoint_dir).to(device)
         else:
-            unet = UNet2DConditionModel.from_pretrained(args.pretrained_model_name, subfolder="unet")
-            unet = patch_unet_for_vton(unet).to(device)
+            unet = load_catvton_unet().to(device)
+            unet = freeze_unet_for_vton(unet)
             
     unet.eval()
     
@@ -188,17 +242,26 @@ def main():
     # 5. Denoising Loop
     scheduler.set_timesteps(args.num_inference_steps)
     
-    # Initialize starting noise
-    latents = torch.randn_like(z_agnostic)
+    # Initialize starting noise for the person try-on area
+    noisy_person = torch.randn_like(z_agnostic)
     
     for t in scheduler.timesteps:
         # Scale model inputs if scheduler requires it
-        latent_model_input = scheduler.scale_model_input(latents, t)
+        scaled_noisy_person = scheduler.scale_model_input(noisy_person, t)
         
-        # Concatenate inputs along the channel dimension
-        # Shape: [B, 13, H_latent, W_latent]
-        # x_concat = Concat(latent_model_input, z_agnostic, m_latent, z_garment)
-        x_concat = torch.cat([latent_model_input, z_agnostic, m_latent, z_garment], dim=1)
+        # Horizontal Spatial Concatenation:
+        # noisy_latents: Concat(scaled_noisy_person, z_garment) along width (dim=-1) -> [B, 4, H, 2W]
+        noisy_latents = torch.cat([scaled_noisy_person, z_garment], dim=-1)
+        
+        # cond_latents: Concat(z_agnostic, z_garment) along width (dim=-1) -> [B, 4, H, 2W]
+        cond_latents = torch.cat([z_agnostic, z_garment], dim=-1)
+        
+        # mask_concat: Concat(m_latent, zero_mask) along width (dim=-1) -> [B, 1, H, 2W]
+        zero_mask = torch.zeros_like(m_latent)
+        mask_concat = torch.cat([m_latent, zero_mask], dim=-1)
+        
+        # Combined 9-channel input tensor
+        x_concat = torch.cat([noisy_latents, cond_latents, mask_concat], dim=1)
         
         if args.guidance_scale > 1.0:
             # For CFG we double the input (for uncond and cond branches)
@@ -221,15 +284,18 @@ def main():
                 encoder_hidden_states=encoder_hidden_states
             ).sample
             
-        # Step scheduler
-        latents = scheduler.step(noise_pred, t, latents).prev_sample
+        # Split predicted noise at the midpoint to get the person part
+        noise_pred_person = noise_pred[:, :, :, :latent_w]
+        
+        # Step scheduler on the person part
+        noisy_person = scheduler.step(noise_pred_person, t, noisy_person).prev_sample
         
     # 6. Decode Latents to Image
     print("Decoding final latents using VAE...")
     if args.mock:
-        decoded = vae.decode(latents).sample
+        decoded = vae.decode(noisy_person).sample
     else:
-        decoded = vae.decode(latents / 0.18215).sample
+        decoded = vae.decode(noisy_person / 0.18215).sample
         
     # Post-process image tensor: shift to [0, 1] range, convert to channel-last, scale to uint8
     image_tensor = decoded.clamp(-1.0, 1.0)
@@ -238,7 +304,6 @@ def main():
     
     # If mock, blend the mock tensor with the original image for visual debugging
     if args.mock:
-        # Create a visually identifiable output: overlay the target garment on the agnostic region
         person_arr = np.array(person_img)
         garment_arr = np.array(garment_img)
         mask_arr = np.array(agnostic_mask_pil)
@@ -248,9 +313,7 @@ def main():
         output_np[mask_arr == 255] = garment_arr[mask_arr == 255]
         
         # Add subtle green border around fitting area to show body segment boundaries
-        contours, _ = cv2 = None, None
         try:
-            import cv2
             contours, _ = cv2.findContours(mask_arr, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             cv2.drawContours(output_np, contours, -1, (0, 255, 0), 2)
         except Exception:
@@ -258,7 +321,19 @@ def main():
             
         output_pil = Image.fromarray(output_np)
     else:
-        output_pil = Image.fromarray((image_np * 255).astype(np.uint8))
+        # Real Cat-VTON inference postprocessing using Laplacian pyramid blending!
+        original_person_np = np.array(person_img).astype(np.float32) / 255.0
+        try_on_np = image_np.astype(np.float32)
+        
+        # Prepare try-on mask for blending (slightly blurred to avoid sharp edge artifacts)
+        mask_np = np.array(agnostic_mask_pil).astype(np.float32) / 255.0
+        mask_blurred = cv2.GaussianBlur(mask_np, (5, 5), 0)
+        
+        # Perform Laplacian blending
+        print("Blending try-on output with original person details...")
+        blended_np = laplacian_pyramid_blend(try_on_np, original_person_np, mask_blurred)
+        
+        output_pil = Image.fromarray((blended_np * 255).astype(np.uint8))
         
     # Save image
     output_pil.save(args.output_path)

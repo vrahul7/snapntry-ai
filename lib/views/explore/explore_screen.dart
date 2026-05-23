@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../config/theme.dart';
 import '../../services/firestore_service.dart';
+import '../../services/try_on_state.dart';
 
 class ExploreScreen extends StatefulWidget {
   const ExploreScreen({super.key});
@@ -149,12 +150,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                           color: AppTheme.primaryNeon,
                           label: 'Try On',
                           onTap: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Scheduling AI Try-On for ${product.title}...'),
-                                backgroundColor: AppTheme.primaryNeon,
-                              ),
-                            );
+                            TryOnState.selectProductForTryOn(product.title, product.imageUrl);
                           },
                         ),
                         const SizedBox(height: 16),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../services/firestore_service.dart';
 import '../../config/theme.dart';
 import '../../config/routes.dart';
+import '../../services/try_on_state.dart';
 
 class CatalogScreen extends StatefulWidget {
   const CatalogScreen({super.key});
@@ -12,7 +13,11 @@ class CatalogScreen extends StatefulWidget {
 
 class _CatalogScreenState extends State<CatalogScreen> {
   final _firestoreService = FirestoreService();
-  late Future<List<ProductItem>> _productsFuture;
+  final List<ProductItem> _products = [];
+  int _currentPage = 1;
+  bool _isLoading = false;
+  bool _hasMore = true;
+  late final ScrollController _scrollController;
 
   final List<Map<String, dynamic>> _categories = [
     {'name': 'Pre-Fall \'26', 'icon': Icons.fiber_new_rounded},
@@ -43,13 +48,59 @@ class _CatalogScreenState extends State<CatalogScreen> {
   @override
   void initState() {
     super.initState();
-    _productsFuture = _firestoreService.getCatalogProducts();
+    _scrollController = ScrollController()..addListener(_onScroll);
+    _loadNextPage();
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+      _loadNextPage();
+    }
+  }
+
+  Future<void> _loadNextPage() async {
+    if (_isLoading || !_hasMore) return;
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final newProducts = await _firestoreService.getCatalogProductsPaged(
+        page: _currentPage,
+        limit: 4,
+      );
+      if (mounted) {
+        setState(() {
+          _products.addAll(newProducts);
+          _currentPage++;
+          if (newProducts.length < 4) {
+            _hasMore = false;
+          }
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Failed to load page $_currentPage: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: SingleChildScrollView(
+        controller: _scrollController,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -103,6 +154,21 @@ class _CatalogScreenState extends State<CatalogScreen> {
               ),
             ),
             _buildProductFeed(),
+            if (_isLoading && _products.isNotEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Center(child: CircularProgressIndicator(color: AppTheme.primaryNeon)),
+              ),
+            if (!_hasMore && _products.isNotEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 16),
+                child: Center(
+                  child: Text(
+                    'No more products to show.',
+                    style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                  ),
+                ),
+              ),
             
             const SizedBox(height: 100), // Spacing to avoid layout overlapping bottom bar
           ],
@@ -353,216 +419,200 @@ class _CatalogScreenState extends State<CatalogScreen> {
   }
 
   Widget _buildProductFeed() {
-    return FutureBuilder<List<ProductItem>>(
-      future: _productsFuture,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Padding(
-            padding: EdgeInsets.symmetric(vertical: 24),
-            child: Center(child: CircularProgressIndicator(color: AppTheme.primaryNeon)),
-          );
-        } else if (snapshot.hasError) {
-          return Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Text('Failed: ${snapshot.error}', style: const TextStyle(color: Colors.redAccent)),
-          );
-        } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-          return const Padding(
-            padding: EdgeInsets.all(20.0),
-            child: Text('Spotlight is empty.'),
-          );
-        }
+    if (_products.isEmpty && _isLoading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 24),
+        child: Center(child: CircularProgressIndicator(color: AppTheme.primaryNeon)),
+      );
+    } else if (_products.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(20.0),
+        child: Center(child: Text('Spotlight is empty.')),
+      );
+    }
 
-        final products = snapshot.data!;
-        final brands = ['Apex Design Studio', 'Savana Wholesale', 'Zara Corporate', 'H&M B2B'];
-        final times = ['2h ago', '5h ago', '1d ago', '3d ago'];
-        final logos = [
-          Icons.brightness_auto_rounded,
-          Icons.style_rounded,
-          Icons.wallet_giftcard_rounded,
-          Icons.storefront_rounded
-        ];
+    final brands = ['Apex Design Studio', 'Savana Wholesale', 'Zara Corporate', 'H&M B2B'];
+    final times = ['2h ago', '5h ago', '1d ago', '3d ago'];
+    final logos = [
+      Icons.brightness_auto_rounded,
+      Icons.style_rounded,
+      Icons.wallet_giftcard_rounded,
+      Icons.storefront_rounded
+    ];
 
-        return ListView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          itemCount: products.length,
-          itemBuilder: (context, index) {
-            final product = products[index];
-            final brandName = brands[index % brands.length];
-            final timeAgo = times[index % times.length];
-            final brandIcon = logos[index % logos.length];
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      itemCount: _products.length,
+      itemBuilder: (context, index) {
+        final product = _products[index];
+        final brandName = brands[index % brands.length];
+        final timeAgo = times[index % times.length];
+        final brandIcon = logos[index % logos.length];
 
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 24),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: AppTheme.darkCard,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppTheme.glassBorder, width: 1.5),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Brand Header
-                    Padding(
-                      padding: const EdgeInsets.all(12.0),
-                      child: Row(
-                        children: [
-                          CircleAvatar(
-                            radius: 18,
-                            backgroundColor: AppTheme.primaryNeon.withValues(alpha: 0.1),
-                            child: Icon(brandIcon, color: AppTheme.primaryNeon, size: 18),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 24),
+          child: Container(
+            decoration: BoxDecoration(
+              color: AppTheme.darkCard,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppTheme.glassBorder, width: 1.5),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Brand Header
+                Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 18,
+                        backgroundColor: AppTheme.primaryNeon.withValues(alpha: 0.1),
+                        child: Icon(brandIcon, color: AppTheme.primaryNeon, size: 18),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
                               children: [
-                                Row(
-                                  children: [
-                                    Text(
-                                      brandName,
-                                      style: const TextStyle(
-                                        color: AppTheme.textPrimary,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 13,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    const Icon(
-                                      Icons.verified_rounded,
-                                      color: AppTheme.secondaryNeon,
-                                      size: 14,
-                                    ),
-                                  ],
-                                ),
                                 Text(
-                                  timeAgo,
+                                  brandName,
                                   style: const TextStyle(
-                                    color: AppTheme.textSecondary,
-                                    fontSize: 10,
+                                    color: AppTheme.textPrimary,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
                                   ),
+                                ),
+                                const SizedBox(width: 4),
+                                const Icon(
+                                  Icons.verified_rounded,
+                                  color: AppTheme.secondaryNeon,
+                                  size: 14,
                                 ),
                               ],
                             ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.more_horiz_rounded, color: AppTheme.textSecondary),
-                            onPressed: () {},
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    // Main Post Image
-                    ClipRRect(
-                      borderRadius: BorderRadius.zero,
-                      child: Image.network(
-                        product.imageUrl,
-                        width: double.infinity,
-                        height: 280,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => Container(
-                          width: double.infinity,
-                          height: 280,
-                          color: AppTheme.darkBg,
-                          child: const Icon(Icons.broken_image_rounded, size: 48, color: AppTheme.textSecondary),
-                        ),
-                      ),
-                    ),
-
-                    // Instagram-style action icons
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.favorite_border_rounded, color: AppTheme.textPrimary, size: 24),
-                          const SizedBox(width: 16),
-                          const Icon(Icons.chat_bubble_outline_rounded, color: AppTheme.textPrimary, size: 22),
-                          const SizedBox(width: 16),
-                          const Icon(Icons.send_outlined, color: AppTheme.textPrimary, size: 22),
-                          const Spacer(),
-                          const Icon(Icons.bookmark_border_rounded, color: AppTheme.textPrimary, size: 24),
-                        ],
-                      ),
-                    ),
-
-                    // Description / Caption
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: RichText(
-                        text: TextSpan(
-                          style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13, height: 1.4),
-                          children: [
-                            TextSpan(
-                              text: '$brandName ',
-                              style: const TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            TextSpan(
-                              text: '${product.description} Wholesale unit price is ${product.price}.',
+                            Text(
+                              timeAgo,
+                              style: const TextStyle(
+                                color: AppTheme.textSecondary,
+                                fontSize: 10,
+                              ),
                             ),
                           ],
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-
-                    // Try-On and Order buttons row
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('Starting AI fit mapping for ${product.title}...'),
-                                    backgroundColor: AppTheme.primaryNeon,
-                                  ),
-                                );
-                              },
-                              icon: const Icon(Icons.auto_awesome_rounded, size: 16),
-                              label: const Text('Try-On Fit', style: TextStyle(fontSize: 12)),
-                              style: OutlinedButton.styleFrom(
-                                side: BorderSide(color: AppTheme.primaryNeon.withValues(alpha: 0.5)),
-                                padding: const EdgeInsets.symmetric(vertical: 10),
-                                foregroundColor: AppTheme.primaryNeon,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              onPressed: () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('Sample order request sent for ${product.title}!'),
-                                    backgroundColor: AppTheme.secondaryNeon,
-                                  ),
-                                );
-                              },
-                              icon: const Icon(Icons.shopping_bag_outlined, size: 16),
-                              label: const Text('Sample Order', style: TextStyle(fontSize: 12)),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppTheme.secondaryNeon,
-                                padding: const EdgeInsets.symmetric(vertical: 10),
-                                foregroundColor: Colors.black,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                              ),
-                            ),
-                          ),
-                        ],
+                      IconButton(
+                        icon: const Icon(Icons.more_horiz_rounded, color: AppTheme.textSecondary),
+                        onPressed: () {},
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            );
-          },
+
+                // Main Post Image
+                ClipRRect(
+                  borderRadius: BorderRadius.zero,
+                  child: Image.network(
+                    product.imageUrl,
+                    width: double.infinity,
+                    height: 280,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) => Container(
+                      width: double.infinity,
+                      height: 280,
+                      color: AppTheme.darkBg,
+                      child: const Icon(Icons.broken_image_rounded, size: 48, color: AppTheme.textSecondary),
+                    ),
+                  ),
+                ),
+
+                // Instagram-style action icons
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.favorite_border_rounded, color: AppTheme.textPrimary, size: 24),
+                      const SizedBox(width: 16),
+                      const Icon(Icons.chat_bubble_outline_rounded, color: AppTheme.textPrimary, size: 22),
+                      const SizedBox(width: 16),
+                      const Icon(Icons.send_outlined, color: AppTheme.textPrimary, size: 22),
+                      const Spacer(),
+                      const Icon(Icons.bookmark_border_rounded, color: AppTheme.textPrimary, size: 24),
+                    ],
+                  ),
+                ),
+
+                // Description / Caption
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: RichText(
+                    text: TextSpan(
+                      style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13, height: 1.4),
+                      children: [
+                        TextSpan(
+                          text: '$brandName ',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        TextSpan(
+                          text: '${product.description} Wholesale unit price is ${product.price}.',
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // Try-On and Order buttons row
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 0, 12, 16),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          onPressed: () {
+                            TryOnState.selectProductForTryOn(product.title, product.imageUrl);
+                          },
+                          icon: const Icon(Icons.auto_awesome_rounded, size: 16),
+                          label: const Text('Try-On Fit', style: TextStyle(fontSize: 12)),
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(color: AppTheme.primaryNeon.withValues(alpha: 0.5)),
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            foregroundColor: AppTheme.primaryNeon,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Sample order request sent for ${product.title}!'),
+                                backgroundColor: AppTheme.secondaryNeon,
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.shopping_bag_outlined, size: 16),
+                          label: const Text('Sample Order', style: TextStyle(fontSize: 12)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.secondaryNeon,
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            foregroundColor: Colors.black,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
         );
       },
     );

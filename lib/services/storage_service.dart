@@ -1,9 +1,9 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_storage/firebase_storage.dart' as fb_storage;
 import 'package:firebase_auth/firebase_auth.dart' as fb_auth;
+import 'package:image_picker/image_picker.dart';
 
 class StorageService {
   static final StorageService _instance = StorageService._internal();
@@ -12,22 +12,20 @@ class StorageService {
 
   bool get isFirebaseEnabled => Firebase.apps.isNotEmpty;
 
-  // Simulates uploading a local image to Firebase Storage and returning a download URL
-  Future<String> uploadUserPhoto(String filePath) async {
+  // Uploads an XFile (image) to Firebase Storage and returns the download URL
+  Future<String> uploadUserPhoto(XFile file) async {
     if (isFirebaseEnabled) {
       try {
         final userId = fb_auth.FirebaseAuth.instance.currentUser?.uid ?? 'anonymous';
         final fileName = 'user_photo_${DateTime.now().millisecondsSinceEpoch}.jpg';
         final ref = fb_storage.FirebaseStorage.instance.ref().child('users/photos/$userId/$fileName');
         
-        if (kIsWeb) {
-          // Web fallback since File(path) is not supported, return standard mock
-          return 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500';
-        } else {
-          final file = File(filePath);
-          final uploadTask = await ref.putFile(file);
-          return await uploadTask.ref.getDownloadURL();
-        }
+        final bytes = await file.readAsBytes();
+        final uploadTask = await ref.putData(
+          bytes,
+          fb_storage.SettableMetadata(contentType: 'image/jpeg'),
+        );
+        return await uploadTask.ref.getDownloadURL();
       } catch (e) {
         debugPrint('Firebase Storage user photo upload error: $e');
         return 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500';
@@ -38,19 +36,18 @@ class StorageService {
     }
   }
 
-  Future<String> uploadProductImage(String filePath) async {
+  Future<String> uploadProductImage(XFile file) async {
     if (isFirebaseEnabled) {
       try {
         final fileName = 'product_${DateTime.now().millisecondsSinceEpoch}.jpg';
         final ref = fb_storage.FirebaseStorage.instance.ref().child('products/$fileName');
         
-        if (kIsWeb) {
-          return 'https://images.unsplash.com/photo-1551028719-00167b16eac5?w=500';
-        } else {
-          final file = File(filePath);
-          final uploadTask = await ref.putFile(file);
-          return await uploadTask.ref.getDownloadURL();
-        }
+        final bytes = await file.readAsBytes();
+        final uploadTask = await ref.putData(
+          bytes,
+          fb_storage.SettableMetadata(contentType: 'image/jpeg'),
+        );
+        return await uploadTask.ref.getDownloadURL();
       } catch (e) {
         debugPrint('Firebase Storage product image upload error: $e');
         return 'https://images.unsplash.com/photo-1551028719-00167b16eac5?w=500';

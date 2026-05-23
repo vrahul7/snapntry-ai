@@ -12,10 +12,10 @@ from tqdm.auto import tqdm
 # Import pipeline modules
 try:
     from dataset import VTONDataset
-    from model import patch_unet_for_vton, get_tiny_unet_for_testing
+    from model import load_catvton_unet, freeze_unet_for_vton, get_tiny_unet_for_testing
 except ImportError:
     from .dataset import VTONDataset
-    from .model import patch_unet_for_vton, get_tiny_unet_for_testing
+    from .model import load_catvton_unet, freeze_unet_for_vton, get_tiny_unet_for_testing
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Cat-VTON style Virtual Try-On Training Pipeline")
@@ -53,7 +53,7 @@ def main():
         print("--- Running in MOCK Mode with tiny models ---")
         # Initialize small test models to bypass downloading and VRAM overhead
         unet = get_tiny_unet_for_testing()
-        unet = patch_unet_for_vton(unet)
+        unet = freeze_unet_for_vton(unet)
         
         # Mocks for scheduling and VAE
         noise_scheduler = DDPMScheduler(
@@ -101,10 +101,10 @@ def main():
             tokenizer = CLIPTokenizer.from_pretrained(args.pretrained_model_name, subfolder="tokenizer")
             text_encoder = CLIPTextModel.from_pretrained(args.pretrained_model_name, subfolder="text_encoder")
             vae = AutoencoderKL.from_pretrained(args.pretrained_model_name, subfolder="vae")
-            unet = UNet2DConditionModel.from_pretrained(args.pretrained_model_name, subfolder="unet")
             
-            # Patch UNet for 13 channels & freeze all but self-attention
-            unet = patch_unet_for_vton(unet)
+            # Load pretrained Cat-VTON UNet instead of runwayml inpainting UNet
+            unet = load_catvton_unet()
+            unet = freeze_unet_for_vton(unet)
         except Exception as e:
             print(f"Failed to load real models: {e}. Force enabling MOCK mode.")
             args.mock = True
@@ -161,28 +161,38 @@ def main():
                 with torch.no_grad():
                     # If mock, vae is our mock class; else standard HF VAE
                     if args.mock:
-                        z_gt = vae.encode(person_img).sample()
+                        z_person = vae.encode(person_img).sample()
                         z_agnostic = vae.encode(agnostic_person_img).sample()
                         z_garment = vae.encode(garment_img).sample()
                     else:
-                        z_gt = vae.encode(person_img).latent_dist.sample() * 0.18215
+                        z_person = vae.encode(person_img).latent_dist.sample() * 0.18215
                         z_agnostic = vae.encode(agnostic_person_img).latent_dist.sample() * 0.18215
                         z_garment = vae.encode(garment_img).latent_dist.sample() * 0.18215
                         
                 # b. Add noise to ground truth person latents
-                noise = torch.randn_like(z_gt)
-                bsz = z_gt.shape[0]
+                noise = torch.randn_like(z_person)
+                bsz = z_person.shape[0]
                 timesteps = torch.randint(0, noise_scheduler.config.num_train_timesteps, (bsz,), device=device).long()
                 
-                noisy_latents = noise_scheduler.add_noise(z_gt, noise, timesteps)
+                noisy_person = noise_scheduler.add_noise(z_person, noise, timesteps)
                 
                 # c. Downsample the agnostic mask to latent dimensions
-                latent_h, latent_w = z_gt.shape[2], z_gt.shape[3]
+                latent_h, latent_w = z_person.shape[2], z_person.shape[3]
                 m_latent = F.interpolate(agnostic_mask, size=(latent_h, latent_w), mode="nearest")
                 
-                # d. Concatenate along channel dimension (Dim 1)
-                # noisy_latents (4) + z_agnostic (4) + m_latent (1) + z_garment (4) = 13 channels
-                x_concat = torch.cat([noisy_latents, z_agnostic, m_latent, z_garment], dim=1)
+                # d. Cat-VTON Horizontal Spatial Concatenation Layout:
+                # noisy_latents (4 channels): Concat(noisy_person, z_garment) along width (dim=-1) -> [B, 4, H, 2W]
+                noisy_latents = torch.cat([noisy_person, z_garment], dim=-1)
+                
+                # cond_latents (4 channels): Concat(z_agnostic, z_garment) along width (dim=-1) -> [B, 4, H, 2W]
+                cond_latents = torch.cat([z_agnostic, z_garment], dim=-1)
+                
+                # mask_concat (1 channel): Concat(m_latent, zero_mask) along width (dim=-1) -> [B, 1, H, 2W]
+                zero_mask = torch.zeros_like(m_latent)
+                mask_concat = torch.cat([m_latent, zero_mask], dim=-1)
+                
+                # Combined input tensor: shape [B, 9, H, 2W]
+                x_concat = torch.cat([noisy_latents, cond_latents, mask_concat], dim=1)
                 
                 # e. Get text embeddings for conditioning (generic prompt for VTON alignment)
                 # To maintain SD text encoder compatibility
@@ -199,13 +209,17 @@ def main():
                         encoder_hidden_states = text_encoder(inputs.input_ids.to(device))[0]
                         
                 # f. Forward pass: predict noise
-                noise_pred = unet(
+                noise_pred_concat = unet(
                     sample=x_concat,
                     timestep=timesteps,
                     encoder_hidden_states=encoder_hidden_states
                 ).sample
                 
-                # g. Calculate MSE Loss
+                # Split noise prediction at the midpoint to get the person prediction part
+                # Output has shape [B, 4, H, 2W]. Person part is the left half [B, 4, H, W]
+                noise_pred = noise_pred_concat[:, :, :, :latent_w]
+                
+                # g. Calculate MSE Loss (only computed on the person region)
                 loss = F.mse_loss(noise_pred.float(), noise.float(), reduction="mean")
                 
                 # h. Backpropagation

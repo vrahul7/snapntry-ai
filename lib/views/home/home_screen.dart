@@ -7,6 +7,7 @@ import '../explore/explore_screen.dart';
 import '../catalog/catalog_screen.dart';
 import '../try_on/try_on_screen.dart';
 import '../profile/profile_screen.dart';
+import '../../services/try_on_state.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -26,11 +27,32 @@ class _HomeScreenState extends State<HomeScreen> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    TryOnState.currentTabNotifier.addListener(_onTabChange);
+    _currentIndex = TryOnState.currentTabNotifier.value;
+  }
+
+  @override
+  void dispose() {
+    TryOnState.currentTabNotifier.removeListener(_onTabChange);
+    super.dispose();
+  }
+
+  void _onTabChange() {
+    if (mounted) {
+      setState(() {
+        _currentIndex = TryOnState.currentTabNotifier.value;
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       extendBody: true, // Allows content to flow behind the bottom navigation bar
       appBar: AppBar(
-        title: Text(_getAppBarTitle(_currentIndex)),
+        title: _buildGradientTitle(_currentIndex),
         actions: [
           IconButton(
             icon: const Icon(Icons.logout_rounded, color: Colors.redAccent),
@@ -56,17 +78,38 @@ class _HomeScreenState extends State<HomeScreen> {
 
   String _getAppBarTitle(int index) {
     switch (index) {
-      case 0:
-        return 'SNAPNTRY AI FEED';
-      case 1:
-        return 'EXPLORE SWIPE';
-      case 2:
-        return 'AI TRY-ON STUDIO';
-      case 3:
-        return 'MY ACCOUNT';
-      default:
-        return 'SnapnTry AI';
+      case 0: return 'SnapnTry';
+      case 1: return 'Explore';
+      case 2: return 'AI Try-On';
+      case 3: return 'My Account';
+      default: return 'SnapnTry';
     }
+  }
+
+  Widget _buildGradientTitle(int index) {
+    final title = _getAppBarTitle(index);
+    final isHome = index == 0;
+    return ShaderMask(
+      shaderCallback: (bounds) => const LinearGradient(
+        colors: [
+          Color(0xFFFF6B35),  // Warm orange
+          Color(0xFFFF2D78),  // Hot pink
+          Color(0xFFC644FC),  // Purple
+        ],
+        begin: Alignment.centerLeft,
+        end: Alignment.centerRight,
+      ).createShader(bounds),
+      child: Text(
+        title,
+        style: TextStyle(
+          color: Colors.white, // ShaderMask overrides this with gradient
+          fontSize: isHome ? 26 : 22,
+          fontWeight: FontWeight.w800,
+          fontStyle: isHome ? FontStyle.italic : FontStyle.normal,
+          letterSpacing: isHome ? -0.5 : 0.5,
+        ),
+      ),
+    );
   }
 
   Widget _buildGlassmorphicBottomBar() {
@@ -114,9 +157,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final bool isActive = _currentIndex == index;
     return GestureDetector(
       onTap: () {
-        setState(() {
-          _currentIndex = index;
-        });
+        TryOnState.currentTabNotifier.value = index;
       },
       behavior: HitTestBehavior.opaque,
       child: Column(

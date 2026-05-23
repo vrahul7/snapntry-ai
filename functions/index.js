@@ -76,11 +76,72 @@ async function isSafeUrl(urlStr) {
 }
 
 /**
+ * Crops a base64 encoded apparel image if the original category is 'one_piece' but the effective category is 'upper_body' or 'lower_body'.
+ * @param {string} base64Str - Base64 encoded apparel image
+ * @param {string} originalCategory - Original category ('upper_body', 'lower_body', 'one_piece')
+ * @param {string} effectiveCategory - Effective category ('upper_body', 'lower_body', 'one_piece')
+ * @returns {Promise<string>} - Cropped base64 string
+ */
+async function cropApparelImage(base64Str, originalCategory, effectiveCategory) {
+  if (originalCategory !== 'one_piece') {
+    return base64Str; // No crop needed if not originally a full body / one-piece garment
+  }
+  if (effectiveCategory === 'one_piece') {
+    return base64Str; // No crop needed if it remains one-piece
+  }
+
+  console.log(`Cropping apparel image from original category: ${originalCategory} to effective category: ${effectiveCategory}...`);
+  try {
+    const sharp = require('sharp');
+    const buffer = Buffer.from(base64Str, 'base64');
+    const image = sharp(buffer);
+    const metadata = await image.metadata();
+    const width = metadata.width;
+    const height = metadata.height;
+
+    if (!width || !height) {
+      console.warn('Could not read image metadata for cropping, returning original image');
+      return base64Str;
+    }
+
+    let extractRegion;
+    if (effectiveCategory === 'upper_body') {
+      // Crop top 55% of the apparel image
+      extractRegion = {
+        left: 0,
+        top: 0,
+        width: width,
+        height: Math.floor(height * 0.55),
+      };
+    } else if (effectiveCategory === 'lower_body') {
+      // Crop bottom 60% of the apparel image
+      const top = Math.floor(height * 0.40);
+      extractRegion = {
+        left: 0,
+        top: top,
+        width: width,
+        height: height - top,
+      };
+    }
+
+    if (extractRegion) {
+      console.log(`Extracting region: ${JSON.stringify(extractRegion)} from ${width}x${height} image`);
+      const croppedBuffer = await image.extract(extractRegion).toBuffer();
+      return croppedBuffer.toString('base64');
+    }
+  } catch (error) {
+    console.error('Error during apparel image cropping:', error);
+  }
+  return base64Str; // Fallback to original
+}
+
+/**
  * Cloud Function to run Vertex AI Virtual Try-On
  * Expects:
  * - personImage: String (public URL)
  * - apparelImage: String (public URL)
  * - category: String (optional, e.g. 'upper_body', 'lower_body', 'one_piece', defaults to 'upper_body')
+ * - originalCategory: String (optional, original category of apparel item before visibility checks)
  */
 exports.generateTryOn = functions.https.onCall(async (data, context) => {
   // Enforce caller authentication to prevent abuse/billing attacks
@@ -93,7 +154,7 @@ exports.generateTryOn = functions.https.onCall(async (data, context) => {
   const userId = context.auth.uid;
   console.log(`Starting secure try-on generation for user: ${userId}`);
 
-  const { personImage, apparelImage, apparelTitle = 'Apparel', category = 'upper_body' } = data;
+  const { personImage, apparelImage, apparelTitle = 'Apparel', category = 'upper_body', originalCategory = category } = data;
 
   if (!personImage || !apparelImage) {
     throw new functions.https.HttpsError(
@@ -132,6 +193,14 @@ exports.generateTryOn = functions.https.onCall(async (data, context) => {
       downloadAsBase64(apparelImage)
     ]);
 
+    // 1.5. Crop apparel image if necessary (fitting full body apparel on partial body model)
+    let processedApparelBase64 = apparelBase64;
+    try {
+      processedApparelBase64 = await cropApparelImage(apparelBase64, originalCategory, category);
+    } catch (cropErr) {
+      console.error('Failed to crop apparel image, using original:', cropErr);
+    }
+
     // 2. Authenticate using google-auth-library
     console.log('Authenticating with Google Cloud Service Account...');
     const auth = new GoogleAuth({
@@ -163,7 +232,7 @@ exports.generateTryOn = functions.https.onCall(async (data, context) => {
           productImages: [
             {
               image: {
-                bytesBase64Encoded: apparelBase64
+                bytesBase64Encoded: processedApparelBase64
               },
               productImageConfig: {
                 maskMode: "MASK_MODE_CLOTHING_AREA",
@@ -252,3 +321,135 @@ exports.generateTryOn = functions.https.onCall(async (data, context) => {
     );
   }
 });
+
+/**
+ * Gemini Vision body-visibility check.
+ * Analyzes the person/model image and reports which body regions are visible.
+ * Expects: { personImageUrl: String, category: String }
+ * Returns: { faceVisible, upperVisible, lowerVisible, effectiveCategory, reason }
+ */
+exports.analyzeBodyVisibility = functions.https.onCall(async (data, context) => {
+  if (!context.auth) {
+    throw new functions.https.HttpsError('unauthenticated', 'Must be authenticated.');
+  }
+
+  const { personImageUrl, category = 'upper_body' } = data;
+
+  if (!personImageUrl) {
+    throw new functions.https.HttpsError('invalid-argument', 'personImageUrl is required.');
+  }
+
+  const safe = await isSafeUrl(personImageUrl);
+  if (!safe) {
+    throw new functions.https.HttpsError('invalid-argument', 'Invalid or unsafe image URL.');
+  }
+
+  try {
+    const personBase64 = await downloadAsBase64(personImageUrl);
+
+    const auth = new GoogleAuth({ scopes: 'https://www.googleapis.com/auth/cloud-platform' });
+    const client = await auth.getClient();
+    const projectId = await auth.getProjectId();
+    const tokenResponse = await client.getAccessToken();
+    const accessToken = tokenResponse.token;
+
+    const region = 'us-central1';
+    const endpoint = `https://${region}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${region}/publishers/google/models/gemini-1.5-flash:generateContent`;
+
+    const prompt = `You are an AI vision system for a virtual try-on app. Analyze this person photo carefully.
+
+Determine which body regions are clearly visible:
+1. faceVisible: Is the person's face clearly visible in the upper portion of the image?
+2. upperVisible: Is the person's upper body (chest, shoulders, torso) clearly visible?
+3. lowerVisible: Is the person's lower body (hips, thighs, legs below waist) clearly visible?
+
+Respond ONLY with a valid JSON object, no markdown, no explanation:
+{"faceVisible": true_or_false, "upperVisible": true_or_false, "lowerVisible": true_or_false}`;
+
+    const geminiPayload = {
+      contents: [{
+        role: 'user',
+        parts: [
+          { text: prompt },
+          { inlineData: { mimeType: 'image/jpeg', data: personBase64 } }
+        ]
+      }],
+      generationConfig: { temperature: 0.1, maxOutputTokens: 100 }
+    };
+
+    const geminiResponse = await axios.post(endpoint, geminiPayload, {
+      headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      timeout: 30000
+    });
+
+    let visibilityJson = {};
+    try {
+      const rawText = geminiResponse.data?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
+      // Strip any markdown code blocks if present
+      const cleaned = rawText.replace(/```json?/g, '').replace(/```/g, '').trim();
+      visibilityJson = JSON.parse(cleaned);
+    } catch (e) {
+      console.warn('Could not parse Gemini visibility JSON, defaulting to all-visible:', e);
+      // Default to allowing generation if parsing fails (fail open)
+      visibilityJson = { faceVisible: true, upperVisible: true, lowerVisible: true };
+    }
+
+    const { faceVisible = true, upperVisible = true, lowerVisible = true } = visibilityJson;
+
+    // Determine effective category and whether to allow generation
+    let effectiveCategory = category;
+    let allowed = true;
+    let reason = '';
+
+    if (category === 'upper_body') {
+      if (!upperVisible) {
+        allowed = false;
+        reason = 'upper_body_missing';
+      }
+    } else if (category === 'lower_body') {
+      if (!lowerVisible) {
+        allowed = false;
+        reason = 'lower_body_missing';
+      }
+    } else if (category === 'one_piece') {
+      if (upperVisible && lowerVisible) {
+        effectiveCategory = 'one_piece';
+      } else if (upperVisible && !lowerVisible) {
+        // Auto-downgrade: only show top fitting
+        effectiveCategory = 'upper_body';
+        reason = 'partial_upper_only';
+      } else if (!upperVisible && lowerVisible) {
+        // Auto-downgrade: only show bottom fitting
+        effectiveCategory = 'lower_body';
+        reason = 'partial_lower_only';
+      } else {
+        allowed = false;
+        reason = 'both_body_missing';
+      }
+    }
+
+    console.log(`Body visibility check: upper=${upperVisible}, lower=${lowerVisible}, face=${faceVisible}, allowed=${allowed}, effectiveCategory=${effectiveCategory}`);
+
+    return {
+      faceVisible,
+      upperVisible,
+      lowerVisible,
+      effectiveCategory,
+      allowed,
+      reason
+    };
+
+  } catch (error) {
+    console.error('Error in analyzeBodyVisibility:', error);
+    // Fail open — don't block user if check itself fails
+    return {
+      faceVisible: true,
+      upperVisible: true,
+      lowerVisible: true,
+      effectiveCategory: category,
+      allowed: true,
+      reason: 'check_failed'
+    };
+  }
+});
+
