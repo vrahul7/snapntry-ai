@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../../config/theme.dart';
 import '../../services/firestore_service.dart';
 import '../../services/try_on_state.dart';
+import '../../services/cart_service.dart';
+import '../../services/wishlist_service.dart';
 
 class ExploreScreen extends StatefulWidget {
   const ExploreScreen({super.key});
@@ -12,13 +14,111 @@ class ExploreScreen extends StatefulWidget {
 
 class _ExploreScreenState extends State<ExploreScreen> {
   final _firestoreService = FirestoreService();
+  final _cartService = CartService();
+  final _wishlistService = WishlistService();
+
   late Future<List<ProductItem>> _productsFuture;
   final PageController _pageController = PageController();
+
+  // Track wishlist state per product id for icon animation
+  final Map<String, bool> _wishlisted = {};
 
   @override
   void initState() {
     super.initState();
     _productsFuture = _firestoreService.getCatalogProducts();
+    // Sync wishlist state
+    _wishlistService.getWishlist().then((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  Future<void> _handleBuy(ProductItem product) async {
+    await _cartService.addToCart(
+      productId: product.id,
+      title: product.title,
+      imageUrl: product.imageUrl,
+      price: product.price,
+      sku: product.sku,
+    );
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.shopping_bag_rounded, color: Colors.white, size: 16),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                '${product.title} added to cart!',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: const Color(0xFF0066CC),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        duration: const Duration(seconds: 2),
+        action: SnackBarAction(
+          label: 'View Cart',
+          textColor: Colors.white,
+          onPressed: () => Navigator.pushNamed(context, '/cart'),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleSave(ProductItem product) async {
+    final added = await _wishlistService.toggle(
+      productId: product.id,
+      title: product.title,
+      imageUrl: product.imageUrl,
+      price: product.price,
+      sku: product.sku,
+    );
+
+    if (mounted) {
+      setState(() {
+        _wishlisted[product.id] = added;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(
+                added ? Icons.bookmark_rounded : Icons.bookmark_remove_rounded,
+                color: Colors.white,
+                size: 16,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  added
+                      ? '${product.title} saved to wishlist!'
+                      : '${product.title} removed from wishlist',
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: added ? AppTheme.darkCard : Colors.grey.shade800,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          duration: const Duration(seconds: 2),
+          action: added
+              ? SnackBarAction(
+                  label: 'View',
+                  textColor: AppTheme.primaryNeon,
+                  onPressed: () => Navigator.pushNamed(context, '/wishlist'),
+                )
+              : null,
+        ),
+      );
+    }
   }
 
   @override
@@ -51,6 +151,9 @@ class _ExploreScreenState extends State<ExploreScreen> {
             itemCount: products.length,
             itemBuilder: (context, index) {
               final product = products[index];
+              final isSaved = _wishlisted[product.id] ??
+                  _wishlistService.isWishlisted(product.id);
+
               return Stack(
                 fit: StackFit.expand,
                 children: [
@@ -61,12 +164,13 @@ class _ExploreScreenState extends State<ExploreScreen> {
                     errorBuilder: (context, error, stackTrace) => Container(
                       color: AppTheme.darkBg,
                       child: const Center(
-                        child: Icon(Icons.broken_image_rounded, size: 64, color: AppTheme.textSecondary),
+                        child: Icon(Icons.broken_image_rounded,
+                            size: 64, color: AppTheme.textSecondary),
                       ),
                     ),
                   ),
 
-                  // Bottom Shadow Overlay for text readability
+                  // Bottom Shadow Overlay
                   Container(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
@@ -117,20 +221,20 @@ class _ExploreScreenState extends State<ExploreScreen> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          product.sku,
+                          product.price,
                           style: const TextStyle(
-                            fontSize: 12,
-                            color: AppTheme.secondaryNeon,
-                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                            color: Color(0xFF7EB8FF),
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 4),
                         Text(
                           product.description,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                            fontSize: 14,
+                            fontSize: 13,
                             color: Colors.white70,
                           ),
                         ),
@@ -150,40 +254,31 @@ class _ExploreScreenState extends State<ExploreScreen> {
                           color: AppTheme.primaryNeon,
                           label: 'Try On',
                           onTap: () {
-                            TryOnState.selectProductForTryOn(product.title, product.imageUrl);
+                            TryOnState.selectProductForTryOn(
+                                product.title, product.imageUrl);
                           },
                         ),
                         const SizedBox(height: 16),
 
-                        // Buy/Cart Action
+                        // Buy / Cart Action
                         _buildFloatingActionButton(
-                          icon: Icons.shopping_bag_outlined,
-                          color: Colors.white.withValues(alpha: 0.1),
+                          icon: Icons.shopping_bag_rounded,
+                          color: const Color(0xFF0066CC),
                           label: 'Buy',
-                          onTap: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('${product.title} added to purchase cart!'),
-                                backgroundColor: AppTheme.darkCard,
-                              ),
-                            );
-                          },
+                          onTap: () => _handleBuy(product),
                         ),
                         const SizedBox(height: 16),
 
-                        // Save Action
+                        // Save / Wishlist Action
                         _buildFloatingActionButton(
-                          icon: Icons.bookmark_border_rounded,
-                          color: Colors.white.withValues(alpha: 0.1),
-                          label: 'Save',
-                          onTap: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('${product.title} saved to corporate wardrobe.'),
-                                backgroundColor: AppTheme.darkCard,
-                              ),
-                            );
-                          },
+                          icon: isSaved
+                              ? Icons.bookmark_rounded
+                              : Icons.bookmark_border_rounded,
+                          color: isSaved
+                              ? AppTheme.primaryNeon.withValues(alpha: 0.8)
+                              : Colors.white.withValues(alpha: 0.15),
+                          label: isSaved ? 'Saved ✓' : 'Save',
+                          onTap: () => _handleSave(product),
                         ),
                       ],
                     ),
@@ -207,7 +302,8 @@ class _ExploreScreenState extends State<ExploreScreen> {
       children: [
         GestureDetector(
           onTap: onTap,
-          child: Container(
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 180),
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: color,
@@ -221,11 +317,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                 ),
               ],
             ),
-            child: Icon(
-              icon,
-              size: 26,
-              color: Colors.white,
-            ),
+            child: Icon(icon, size: 26, color: Colors.white),
           ),
         ),
         const SizedBox(height: 4),

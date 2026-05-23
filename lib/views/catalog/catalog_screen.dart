@@ -3,6 +3,8 @@ import '../../services/firestore_service.dart';
 import '../../config/theme.dart';
 import '../../config/routes.dart';
 import '../../services/try_on_state.dart';
+import '../../services/cart_service.dart';
+import '../../services/wishlist_service.dart';
 import 'visual_search_delegate.dart';
 
 class CatalogScreen extends StatefulWidget {
@@ -14,6 +16,8 @@ class CatalogScreen extends StatefulWidget {
 
 class _CatalogScreenState extends State<CatalogScreen> {
   final _firestoreService = FirestoreService();
+  final _cartService = CartService();
+  final _wishlistService = WishlistService();
   final List<ProductItem> _products = [];
   int _currentPage = 1;
   bool _isLoading = false;
@@ -248,15 +252,50 @@ class _CatalogScreenState extends State<CatalogScreen> {
             );
           }),
           const SizedBox(width: 8),
-          // Cart circle
-          _buildIconButton(Icons.shopping_bag_outlined, () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Sample cart is currently empty.'),
-                backgroundColor: AppTheme.darkCard,
-              ),
-            );
-          }),
+          // Cart circle with live badge
+          ValueListenableBuilder<int>(
+            valueListenable: _cartService.cartCountNotifier,
+            builder: (context, count, _) {
+              return GestureDetector(
+                onTap: () => Navigator.pushNamed(context, '/cart'),
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Container(
+                      height: 48,
+                      width: 48,
+                      decoration: BoxDecoration(
+                        color: AppTheme.darkCard,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: AppTheme.glassBorder, width: 1),
+                      ),
+                      child: const Icon(Icons.shopping_bag_rounded, color: Colors.white, size: 20),
+                    ),
+                    if (count > 0)
+                      Positioned(
+                        top: -4,
+                        right: -4,
+                        child: Container(
+                          width: 18,
+                          height: 18,
+                          decoration: BoxDecoration(
+                            color: AppTheme.primaryNeon,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: AppTheme.darkBg, width: 2),
+                          ),
+                          child: Center(
+                            child: Text(
+                              '$count',
+                              style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              );
+            },
+          ),
         ],
       ),
     );
@@ -570,7 +609,52 @@ class _CatalogScreenState extends State<CatalogScreen> {
                       const SizedBox(width: 16),
                       const Icon(Icons.send_outlined, color: AppTheme.textPrimary, size: 22),
                       const Spacer(),
-                      const Icon(Icons.bookmark_border_rounded, color: AppTheme.textPrimary, size: 24),
+                      // Wishlist bookmark icon — wired to WishlistService
+                      GestureDetector(
+                        onTap: () async {
+                          final added = await _wishlistService.toggle(
+                            productId: product.id,
+                            title: product.title,
+                            imageUrl: product.imageUrl,
+                            price: product.price,
+                            sku: product.sku,
+                          );
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  added
+                                      ? '${product.title} saved to wishlist!'
+                                      : '${product.title} removed from wishlist',
+                                ),
+                                backgroundColor: AppTheme.darkCard,
+                                behavior: SnackBarBehavior.floating,
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12)),
+                                action: added
+                                    ? SnackBarAction(
+                                        label: 'View Wishlist',
+                                        textColor: AppTheme.primaryNeon,
+                                        onPressed: () =>
+                                            Navigator.pushNamed(context, '/wishlist'),
+                                      )
+                                    : null,
+                                duration: const Duration(seconds: 2),
+                              ),
+                            );
+                            setState(() {}); // Rebuild to update icon
+                          }
+                        },
+                        child: Icon(
+                          _wishlistService.isWishlisted(product.id)
+                              ? Icons.bookmark_rounded
+                              : Icons.bookmark_border_rounded,
+                          color: _wishlistService.isWishlisted(product.id)
+                              ? AppTheme.primaryNeon
+                              : AppTheme.textPrimary,
+                          size: 24,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -618,13 +702,38 @@ class _CatalogScreenState extends State<CatalogScreen> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: ElevatedButton.icon(
-                          onPressed: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text('Sample order request sent for ${product.title}!'),
-                                backgroundColor: AppTheme.secondaryNeon,
-                              ),
+                          onPressed: () async {
+                            await _cartService.addToCart(
+                              productId: product.id,
+                              title: product.title,
+                              imageUrl: product.imageUrl,
+                              price: product.price,
+                              sku: product.sku,
                             );
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Row(
+                                    children: [
+                                      const Icon(Icons.shopping_bag_rounded, color: Colors.white, size: 16),
+                                      const SizedBox(width: 8),
+                                      Expanded(child: Text('${product.title} added to cart!')),
+                                    ],
+                                  ),
+                                  backgroundColor: const Color(0xFF0066CC),
+                                  behavior: SnackBarBehavior.floating,
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12)),
+                                  action: SnackBarAction(
+                                    label: 'View Cart',
+                                    textColor: Colors.white,
+                                    onPressed: () =>
+                                        Navigator.pushNamed(context, '/cart'),
+                                  ),
+                                  duration: const Duration(seconds: 2),
+                                ),
+                              );
+                            }
                           },
                           icon: const Icon(Icons.shopping_bag_outlined, size: 16),
                           label: const Text('Sample Order', style: TextStyle(fontSize: 12)),

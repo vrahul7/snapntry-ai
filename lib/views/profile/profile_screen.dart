@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../services/firebase_auth_service.dart';
+import '../../services/cart_service.dart';
 import '../../config/theme.dart';
 
 class ProfileScreen extends StatelessWidget {
@@ -59,6 +60,41 @@ class ProfileScreen extends StatelessWidget {
             _buildProfileInfoItem(context, label: 'Try-On Status', value: 'Unlimited AI Checks'),
 
             const SizedBox(height: 32),
+
+            // Quick links
+            Text(
+              'My Activity',
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+
+            // Cart tile
+            ValueListenableBuilder<int>(
+              valueListenable: CartService().cartCountNotifier,
+              builder: (context, count, _) {
+                return _buildActivityTile(
+                  context,
+                  icon: Icons.shopping_bag_rounded,
+                  label: 'My Cart',
+                  badge: count > 0 ? '$count item${count > 1 ? 's' : ''}' : null,
+                  color: const Color(0xFF0066CC),
+                  onTap: () => Navigator.pushNamed(context, '/cart'),
+                );
+              },
+            ),
+            const SizedBox(height: 10),
+
+            // Wishlist tile
+            _buildActivityTile(
+              context,
+              icon: Icons.bookmark_rounded,
+              label: 'Saved Items',
+              badge: null,
+              color: AppTheme.primaryNeon,
+              onTap: () => Navigator.pushNamed(context, '/wishlist'),
+            ),
+            const SizedBox(height: 32),
+
             SizedBox(
               width: double.infinity,
               child: OutlinedButton(
@@ -107,4 +143,63 @@ class ProfileScreen extends StatelessWidget {
       ),
     );
   }
+
+  Widget _buildActivityTile(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required String? badge,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppTheme.darkCard,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppTheme.glassBorder, width: 1),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, color: color, size: 20),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                label,
+                style: const TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 14),
+              ),
+            ),
+            if (badge != null)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  badge,
+                  style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold),
+                ),
+              ),
+            const SizedBox(width: 8),
+            const Icon(Icons.chevron_right_rounded, color: AppTheme.textSecondary, size: 20),
+          ],
+        ),
+      ),
+    );
+  }
 }
+

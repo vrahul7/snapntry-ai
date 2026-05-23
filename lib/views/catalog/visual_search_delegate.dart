@@ -6,6 +6,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import '../../config/theme.dart';
 import '../../services/try_on_state.dart';
+import '../../services/cart_service.dart';
+import '../../services/firestore_service.dart';
 
 /// Visual Search Screen — lets users snap or upload a clothing photo to search
 /// the catalog using Gemini Vision via the `searchCatalogByImage` Cloud Function.
@@ -25,6 +27,9 @@ class _VisualSearchScreenState extends State<VisualSearchScreen>
   List<String> _keywords = [];
   String? _errorText;
   bool _hasSearched = false;
+
+  final _cartService = CartService();
+  final _firestoreService = FirestoreService();
 
   // Pulsing animation for drop zone
   late final AnimationController _pulseController;
@@ -80,12 +85,15 @@ class _VisualSearchScreenState extends State<VisualSearchScreen>
     });
 
     try {
-      // Encode image to base64
+      // Try Cloud Function first
       final bytes = await image.readAsBytes();
       final base64Str = base64Encode(bytes);
 
       final HttpsCallable callable =
-          FirebaseFunctions.instance.httpsCallable('searchCatalogByImage');
+          FirebaseFunctions.instance.httpsCallable(
+        'searchCatalogByImage',
+        options: HttpsCallableOptions(timeout: const Duration(seconds: 25)),
+      );
       final result = await callable.call<Map<String, dynamic>>(<String, dynamic>{
         'snapBase64': base64Str,
       });
@@ -109,16 +117,73 @@ class _VisualSearchScreenState extends State<VisualSearchScreen>
         });
       }
     } catch (e) {
-      debugPrint('Visual search error: $e');
+      debugPrint('Cloud Function search failed ($e), using local fallback...');
+      // ── LOCAL FALLBACK: keyword-match against local catalog ──────────────────
+      await _runLocalSearch();
+    }
+  }
+
+  /// Local visual search fallback — loads catalog from FirestoreService and
+  /// returns all items (since we can't run actual image classification locally).
+  /// In practice this gives the user browsable results even when the Cloud
+  /// Function is unavailable.
+  Future<void> _runLocalSearch() async {
+    try {
+      final products = await _firestoreService.getCatalogProducts();
+
+      final localResults = products
+          .map((p) => {
+                'id': p.id,
+                'name': p.title,
+                'imageUrl': p.imageUrl,
+                'price': 0.0,
+                'priceStr': p.price,
+                'currency': 'INR',
+                'category': _categoryFromTitle(p.title),
+                'description': p.description,
+                'score': 1,
+              })
+          .toList();
+
+      if (mounted) {
+        setState(() {
+          _results = localResults;
+          _keywords = ['fashion', 'clothing', 'style'];
+          _garmentInfo = {
+            'description': 'Browse our full catalog below',
+            'type': 'clothing',
+            'style': 'mixed',
+            'primaryColor': 'various',
+          };
+          _isSearching = false;
+          _hasSearched = true;
+          _errorText = null;
+        });
+      }
+    } catch (e) {
+      debugPrint('Local search fallback also failed: $e');
       if (mounted) {
         setState(() {
           _isSearching = false;
           _hasSearched = true;
-          _errorText = 'Visual search unavailable. Please check connectivity.';
+          _errorText =
+              'Search unavailable. Please check your internet connection and try again.';
         });
       }
     }
   }
+
+  String _categoryFromTitle(String title) {
+    final t = title.toLowerCase();
+    if (t.contains('dress') || t.contains('gown') || t.contains('one-piece')) {
+      return 'one_piece';
+    } else if (t.contains('pants') || t.contains('trouser') ||
+        t.contains('cargo') || t.contains('jeans') || t.contains('shorts')) {
+      return 'lower_body';
+    }
+    return 'upper_body';
+  }
+
 
   void _tryOnProduct(Map<String, dynamic> product) {
     final name = product['name'] as String? ?? 'Product';
@@ -596,8 +661,10 @@ class _VisualSearchScreenState extends State<VisualSearchScreen>
     final name = product['name'] as String? ?? 'Product';
     final imageUrl = product['imageUrl'] as String? ?? '';
     final price = (product['price'] as num?)?.toDouble() ?? 0.0;
+    final priceStr = product['priceStr'] as String?;
     final currency = product['currency'] as String? ?? 'INR';
-    final priceStr = price > 0 ? '₹${price.toStringAsFixed(0)}' : currency;
+    final displayPrice = priceStr ?? (price > 0 ? '₹${price.toStringAsFixed(0)}' : currency);
+    final productId = product['id'] as String? ?? name;
 
     return GestureDetector(
       onTap: () => _tryOnProduct(product),
@@ -632,7 +699,7 @@ class _VisualSearchScreenState extends State<VisualSearchScreen>
                       ),
               ),
             ),
-            // Info + button
+            // Info + buttons
             Padding(
               padding: const EdgeInsets.all(10),
               child: Column(
@@ -640,13 +707,21 @@ class _VisualSearchScreenState extends State<VisualSearchScreen>
                 children: [
                   Text(
                     name,
-                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 4),
-                  Text(priceStr, style: const TextStyle(color: AppTheme.primaryNeon, fontSize: 12, fontWeight: FontWeight.bold)),
+                  Text(displayPrice,
+                      style: const TextStyle(
+                          color: AppTheme.primaryNeon,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
+                  // Try On button
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(vertical: 6),
@@ -661,9 +736,68 @@ class _VisualSearchScreenState extends State<VisualSearchScreen>
                         SizedBox(width: 4),
                         Text(
                           'Try On',
-                          style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold),
                         ),
                       ],
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  // Add to Cart button
+                  GestureDetector(
+                    onTap: () async {
+                      await _cartService.addToCart(
+                        productId: productId,
+                        title: name,
+                        imageUrl: imageUrl,
+                        price: displayPrice,
+                        sku: productId,
+                      );
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('$name added to cart!'),
+                            backgroundColor: const Color(0xFF0066CC),
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12)),
+                            duration: const Duration(seconds: 2),
+                            action: SnackBarAction(
+                              label: 'View Cart',
+                              textColor: Colors.white,
+                              onPressed: () =>
+                                  Navigator.pushNamed(context, '/cart'),
+                            ),
+                          ),
+                        );
+                      }
+                    },
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF0066CC).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                            color: const Color(0xFF0066CC).withValues(alpha: 0.5)),
+                      ),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.shopping_bag_rounded,
+                              color: Color(0xFF7EB8FF), size: 12),
+                          SizedBox(width: 4),
+                          Text(
+                            'Add to Cart',
+                            style: TextStyle(
+                                color: Color(0xFF7EB8FF),
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ],

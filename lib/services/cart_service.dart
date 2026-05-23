@@ -1,0 +1,201 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
+
+/// Cart item model
+class CartItem {
+  final String id;
+  final String productId;
+  final String title;
+  final String imageUrl;
+  final String price;
+  final String sku;
+  int quantity;
+
+  CartItem({
+    required this.id,
+    required this.productId,
+    required this.title,
+    required this.imageUrl,
+    required this.price,
+    required this.sku,
+    this.quantity = 1,
+  });
+
+  Map<String, dynamic> toMap() => {
+    'productId': productId,
+    'title': title,
+    'imageUrl': imageUrl,
+    'price': price,
+    'sku': sku,
+    'quantity': quantity,
+    'addedAt': FieldValue.serverTimestamp(),
+  };
+
+  factory CartItem.fromMap(Map<String, dynamic> map, String docId) => CartItem(
+    id: docId,
+    productId: map['productId'] ?? '',
+    title: map['title'] ?? '',
+    imageUrl: map['imageUrl'] ?? '',
+    price: map['price'] ?? '',
+    sku: map['sku'] ?? '',
+    quantity: (map['quantity'] as int?) ?? 1,
+  );
+}
+
+/// Singleton Cart Service — persists cart to Firestore per user, with local fallback.
+class CartService {
+  static final CartService _instance = CartService._internal();
+  factory CartService() => _instance;
+  CartService._internal();
+
+  // In-memory cart (local fallback / mirror)
+  final List<CartItem> _localCart = [];
+  final ValueNotifier<int> cartCountNotifier = ValueNotifier<int>(0);
+
+  String? get _uid => FirebaseAuth.instance.currentUser?.uid;
+
+  bool get _firebaseEnabled {
+    try {
+      return _uid != null;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  CollectionReference<Map<String, dynamic>>? get _cartCol {
+    if (!_firebaseEnabled) return null;
+    return FirebaseFirestore.instance
+        .collection('users')
+        .doc(_uid)
+        .collection('cart');
+  }
+
+  // ── Add to cart ──────────────────────────────────────────────────────────────
+  Future<void> addToCart({
+    required String productId,
+    required String title,
+    required String imageUrl,
+    required String price,
+    required String sku,
+    int quantity = 1,
+  }) async {
+    // Check if already in local cart
+    final existing = _localCart.indexWhere((c) => c.productId == productId);
+    if (existing != -1) {
+      _localCart[existing].quantity += quantity;
+      cartCountNotifier.value = totalCount;
+      // Update in Firestore if available
+      if (_firebaseEnabled) {
+        try {
+          await _cartCol!.doc(_localCart[existing].id).update({
+            'quantity': _localCart[existing].quantity,
+          });
+        } catch (e) {
+          debugPrint('CartService Firestore update error: $e');
+        }
+      }
+      return;
+    }
+
+    final newItem = CartItem(
+      id: productId, // use productId as doc id for easy lookup
+      productId: productId,
+      title: title,
+      imageUrl: imageUrl,
+      price: price,
+      sku: sku,
+      quantity: quantity,
+    );
+    _localCart.add(newItem);
+    cartCountNotifier.value = totalCount;
+
+    if (_firebaseEnabled) {
+      try {
+        await _cartCol!.doc(productId).set(newItem.toMap());
+      } catch (e) {
+        debugPrint('CartService Firestore add error: $e');
+      }
+    }
+  }
+
+  // ── Remove from cart ─────────────────────────────────────────────────────────
+  Future<void> removeFromCart(String productId) async {
+    _localCart.removeWhere((c) => c.productId == productId);
+    cartCountNotifier.value = totalCount;
+    if (_firebaseEnabled) {
+      try {
+        await _cartCol!.doc(productId).delete();
+      } catch (e) {
+        debugPrint('CartService Firestore delete error: $e');
+      }
+    }
+  }
+
+  // ── Get all cart items ───────────────────────────────────────────────────────
+  Future<List<CartItem>> getCart() async {
+    if (_firebaseEnabled) {
+      try {
+        final snapshot = await _cartCol!.get();
+        final items = snapshot.docs
+            .map((doc) => CartItem.fromMap(doc.data(), doc.id))
+            .toList();
+        _localCart
+          ..clear()
+          ..addAll(items);
+        cartCountNotifier.value = totalCount;
+        return items;
+      } catch (e) {
+        debugPrint('CartService Firestore fetch error: $e');
+      }
+    }
+    return List.from(_localCart);
+  }
+
+  // ── Update quantity ──────────────────────────────────────────────────────────
+  Future<void> updateQuantity(String productId, int qty) async {
+    final idx = _localCart.indexWhere((c) => c.productId == productId);
+    if (idx == -1) return;
+    if (qty <= 0) {
+      await removeFromCart(productId);
+      return;
+    }
+    _localCart[idx].quantity = qty;
+    cartCountNotifier.value = totalCount;
+    if (_firebaseEnabled) {
+      try {
+        await _cartCol!.doc(productId).update({'quantity': qty});
+      } catch (e) {
+        debugPrint('CartService Firestore qty update error: $e');
+      }
+    }
+  }
+
+  // ── Clear cart ───────────────────────────────────────────────────────────────
+  Future<void> clearCart() async {
+    _localCart.clear();
+    cartCountNotifier.value = 0;
+    if (_firebaseEnabled) {
+      try {
+        final snapshot = await _cartCol!.get();
+        final batch = FirebaseFirestore.instance.batch();
+        for (final doc in snapshot.docs) {
+          batch.delete(doc.reference);
+        }
+        await batch.commit();
+      } catch (e) {
+        debugPrint('CartService Firestore clear error: $e');
+      }
+    }
+  }
+
+  // ── Helpers ──────────────────────────────────────────────────────────────────
+  int get totalCount => _localCart.fold(0, (acc, item) => acc + item.quantity);
+
+  bool isInCart(String productId) => _localCart.any((c) => c.productId == productId);
+
+  // Sync from Firestore on login
+  Future<void> syncOnLogin() async {
+    await getCart();
+  }
+}
