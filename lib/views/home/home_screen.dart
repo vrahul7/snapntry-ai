@@ -67,9 +67,24 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       body: SafeArea(
         bottom: false,
-        child: IndexedStack(
-          index: _currentIndex,
-          children: _screens,
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 220),
+          switchInCurve: Curves.easeOut,
+          switchOutCurve: Curves.easeIn,
+          transitionBuilder: (child, animation) {
+            return FadeTransition(
+              opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
+              child: child,
+            );
+          },
+          // Key forces AnimatedSwitcher to animate on tab change
+          child: KeyedSubtree(
+            key: ValueKey<int>(_currentIndex),
+            child: IndexedStack(
+              index: _currentIndex,
+              children: _screens,
+            ),
+          ),
         ),
       ),
       bottomNavigationBar: _buildGlassmorphicBottomBar(),
@@ -163,19 +178,38 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(
-            isActive ? activeIcon : icon,
-            color: isActive ? AppTheme.primaryNeon : AppTheme.textSecondary,
-            size: 26,
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOutCubic,
+            width: isActive ? 44 : 36,
+            height: isActive ? 44 : 36,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: isActive
+                  ? AppTheme.primaryNeon.withValues(alpha: 0.15)
+                  : Colors.transparent,
+            ),
+            child: Center(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 180),
+                child: Icon(
+                  isActive ? activeIcon : icon,
+                  key: ValueKey<bool>(isActive),
+                  color: isActive ? AppTheme.primaryNeon : AppTheme.textSecondary,
+                  size: isActive ? 24 : 22,
+                ),
+              ),
+            ),
           ),
-          const SizedBox(height: 4),
-          Text(
-            label,
+          const SizedBox(height: 2),
+          AnimatedDefaultTextStyle(
+            duration: const Duration(milliseconds: 200),
             style: TextStyle(
               color: isActive ? AppTheme.primaryNeon : AppTheme.textSecondary,
-              fontSize: 10,
+              fontSize: isActive ? 10.5 : 10,
               fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
             ),
+            child: Text(label),
           ),
         ],
       ),

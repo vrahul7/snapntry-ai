@@ -3,38 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'analytics_service.dart';
 
-/// Wishlist item model
-class WishlistItem {
-  final String productId;
-  final String title;
-  final String imageUrl;
-  final String price;
-  final String sku;
-
-  WishlistItem({
-    required this.productId,
-    required this.title,
-    required this.imageUrl,
-    required this.price,
-    required this.sku,
-  });
-
-  Map<String, dynamic> toMap() => {
-    'title': title,
-    'imageUrl': imageUrl,
-    'price': price,
-    'sku': sku,
-    'savedAt': FieldValue.serverTimestamp(),
-  };
-
-  factory WishlistItem.fromMap(Map<String, dynamic> map, String docId) => WishlistItem(
-    productId: docId,
-    title: map['title'] ?? '',
-    imageUrl: map['imageUrl'] ?? '',
-    price: map['price'] ?? '',
-    sku: map['sku'] ?? '',
-  );
-}
+import '../models/wishlist_model.dart';
+export '../models/wishlist_model.dart';
 
 /// Singleton Wishlist Service — persists to Firestore per user, with local fallback.
 class WishlistService {

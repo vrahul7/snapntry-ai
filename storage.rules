@@ -12,10 +12,10 @@ service firebase.storage {
       allow write: if false;
     }
     
-    // Products directory: read/write for authenticated users (write allowed for catalog seeding)
+    // Products directory: public read for authenticated partners; write restricted to admin SDK
     match /products/{allPaths=**} {
       allow read: if request.auth != null;
-      allow write: if request.auth != null;
+      allow write: if request.auth != null && request.auth.token.admin == true;
     }
   }
 }

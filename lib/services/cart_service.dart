@@ -3,46 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'analytics_service.dart';
 
-/// Cart item model
-class CartItem {
-  final String id;
-  final String productId;
-  final String title;
-  final String imageUrl;
-  final String price;
-  final String sku;
-  int quantity;
-
-  CartItem({
-    required this.id,
-    required this.productId,
-    required this.title,
-    required this.imageUrl,
-    required this.price,
-    required this.sku,
-    this.quantity = 1,
-  });
-
-  Map<String, dynamic> toMap() => {
-    'productId': productId,
-    'title': title,
-    'imageUrl': imageUrl,
-    'price': price,
-    'sku': sku,
-    'quantity': quantity,
-    'addedAt': FieldValue.serverTimestamp(),
-  };
-
-  factory CartItem.fromMap(Map<String, dynamic> map, String docId) => CartItem(
-    id: docId,
-    productId: map['productId'] ?? '',
-    title: map['title'] ?? '',
-    imageUrl: map['imageUrl'] ?? '',
-    price: map['price'] ?? '',
-    sku: map['sku'] ?? '',
-    quantity: (map['quantity'] as int?) ?? 1,
-  );
-}
+import '../models/cart_model.dart';
+export '../models/cart_model.dart';
 
 /// Singleton Cart Service — persists cart to Firestore per user, with local fallback.
 class CartService {

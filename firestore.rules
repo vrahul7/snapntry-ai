@@ -3,16 +3,24 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // User profile rules: Only the authenticated user can read or write their own profile
+    // User profile and subcollections: Only the authenticated owner can access
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
+
+      match /cart/{cartId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
+
+      match /wishlist/{wishlistId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
     }
     
-    // Products rules: Any authenticated B2B partner can read products
+    // Products rules: Any authenticated user can read; client writes are restricted
     match /products/{productId} {
       allow read: if request.auth != null;
-      // Allow write/update for automatic catalog seeding in demo mode
-      allow write: if request.auth != null;
+      // Allow write only by admin or initial catalog seeding
+      allow write: if request.auth != null && (request.auth.token.admin == true || !exists(/databases/$(database)/documents/products/$(productId)));
     }
     
     // Try-on transactions logging rules: Users can read and write only their own logs
@@ -20,6 +28,14 @@ service cloud.firestore {
       allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
       allow read: if request.auth != null && resource.data.userId == request.auth.uid;
       // Prevent updating or deleting logged transactions to ensure audit integrity
+      allow update, delete: if false;
+    }
+
+    // 3D Mesh Render jobs: Users can create and monitor their own asynchronous tasks
+    match /3d_renders/{renderId} {
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+      // Step progression and final outputs are written exclusively by Cloud Functions Admin SDK
       allow update, delete: if false;
     }
   }

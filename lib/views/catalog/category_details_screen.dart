@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../config/theme.dart';
 import '../../services/firestore_service.dart';
+import '../../services/try_on_state.dart';
+import '../../widgets/app_network_image.dart';
 
 class CategoryDetailsScreen extends StatefulWidget {
   final String categoryName;
@@ -27,106 +29,89 @@ class _CategoryDetailsScreenState extends State<CategoryDetailsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Stack(
-        children: [
-          // Background Gradient matching AppTheme
-          Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Color(0xFF0A0A0E),
-                  Color(0xFF14142B),
+      backgroundColor: AppTheme.darkBg,
+      body: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Navigation Header
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+              child: Row(
+                children: [
+                  GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: AppTheme.darkCard,
+                        borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+                        border: Border.all(color: AppTheme.glassBorder, width: 1),
+                      ),
+                      child: const Icon(
+                        Icons.arrow_back_ios_new_rounded,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Text(
+                    widget.categoryName.toUpperCase(),
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
                 ],
               ),
             ),
-          ),
-          
-          SafeArea(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Navigation Header
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-                  child: Row(
-                    children: [
-                      GestureDetector(
-                        onTap: () => Navigator.pop(context),
-                        child: Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: AppTheme.darkCard.withValues(alpha: 0.8),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: AppTheme.glassBorder, width: 1),
-                          ),
-                          child: const Icon(
-                            Icons.arrow_back_ios_new_rounded,
-                            color: Colors.white,
-                            size: 18,
-                          ),
-                        ),
+
+            const SizedBox(height: 16),
+
+            // 2x2 Grid Layout of products
+            Expanded(
+              child: FutureBuilder<List<ProductItem>>(
+                future: _productsFuture,
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(
+                      child: CircularProgressIndicator(color: AppTheme.primaryNeon),
+                    );
+                  } else if (snapshot.hasError) {
+                    return Center(
+                      child: Text(
+                        'Error: ${snapshot.error}',
+                        style: const TextStyle(color: Colors.redAccent),
                       ),
-                      const SizedBox(width: 16),
-                      Text(
-                        widget.categoryName.toUpperCase(),
-                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: 1.5,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                    );
+                  } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                    return const Center(
+                      child: Text('No items in this category.', style: TextStyle(color: Colors.white38)),
+                    );
+                  }
 
-                const SizedBox(height: 16),
-
-                // 2x2 Grid Layout of products
-                Expanded(
-                  child: FutureBuilder<List<ProductItem>>(
-                    future: _productsFuture,
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const Center(
-                          child: CircularProgressIndicator(color: AppTheme.primaryNeon),
-                        );
-                      } else if (snapshot.hasError) {
-                        return Center(
-                          child: Text(
-                            'Error: ${snapshot.error}',
-                            style: const TextStyle(color: Colors.redAccent),
-                          ),
-                        );
-                      } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                        return const Center(
-                          child: Text('No items in this category.'),
-                        );
-                      }
-
-                      final products = snapshot.data!;
-                      return GridView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2,
-                          crossAxisSpacing: 16,
-                          mainAxisSpacing: 16,
-                          childAspectRatio: 0.72,
-                        ),
-                        itemCount: products.length,
-                        itemBuilder: (context, index) {
-                          final product = products[index];
-                          return _buildGridCard(product);
-                        },
-                      );
+                  final products = snapshot.data!;
+                  return GridView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      crossAxisSpacing: 14,
+                      mainAxisSpacing: 14,
+                      childAspectRatio: 0.72,
+                    ),
+                    itemCount: products.length,
+                    itemBuilder: (context, index) {
+                      final product = products[index];
+                      return _buildGridCard(product);
                     },
-                  ),
-                ),
-              ],
+                  );
+                },
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -134,31 +119,27 @@ class _CategoryDetailsScreenState extends State<CategoryDetailsScreen> {
   Widget _buildGridCard(ProductItem product) {
     return GestureDetector(
       onTap: () {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${product.title} selected for virtual fit mapping.'),
-            backgroundColor: AppTheme.primaryNeon,
-          ),
+        TryOnState.selectProductForTryOn(product.title, product.imageUrl);
+        Navigator.pop(context);
+        AppTheme.showSuccessSnackbar(
+          context,
+          '${product.title} loaded in Try-On Studio!',
         );
       },
       child: Container(
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppTheme.glassBorder, width: 1.5),
+          borderRadius: BorderRadius.circular(AppTheme.radiusCard),
+          border: Border.all(color: AppTheme.glassBorder, width: 1.2),
         ),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(AppTheme.radiusCard - 1),
           child: Stack(
             fit: StackFit.expand,
             children: [
               // Product Image Background
-              Image.network(
-                product.imageUrl,
+              AppNetworkImage(
+                imageUrl: product.imageUrl,
                 fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => Container(
-                  color: AppTheme.darkCard,
-                  child: const Icon(Icons.broken_image_rounded, color: AppTheme.textSecondary),
-                ),
               ),
 
               // Gradient Overlay at the bottom
@@ -188,7 +169,7 @@ class _CategoryDetailsScreenState extends State<CategoryDetailsScreen> {
                       product.title,
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 14,
+                        fontSize: 13,
                         fontWeight: FontWeight.bold,
                       ),
                       maxLines: 1,
@@ -196,7 +177,7 @@ class _CategoryDetailsScreenState extends State<CategoryDetailsScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      product.price.split(' /').first, // just show price value e.g. $129.00
+                      product.price.split(' /').first,
                       style: const TextStyle(
                         color: AppTheme.secondaryNeon,
                         fontSize: 12,

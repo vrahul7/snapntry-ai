@@ -4,6 +4,8 @@ import '../../services/wishlist_service.dart';
 import '../../services/cart_service.dart';
 import '../../services/try_on_state.dart';
 
+import '../../widgets/app_network_image.dart';
+
 /// Wishlist screen — shows all saved items with Try-On and Add to Cart actions.
 class WishlistScreen extends StatefulWidget {
   const WishlistScreen({super.key});
@@ -46,29 +48,16 @@ class _WishlistScreenState extends State<WishlistScreen> {
   Future<void> _removeItem(WishlistItem item) async {
     await _wishlistService.remove(item.productId);
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.bookmark_remove_rounded, color: Colors.white, size: 16),
-              const SizedBox(width: 8),
-              Text('${item.title} removed from wishlist'),
-            ],
-          ),
-          backgroundColor: AppTheme.darkCard,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          action: SnackBarAction(
-            label: 'Undo',
-            textColor: AppTheme.primaryNeon,
-            onPressed: () => _wishlistService.add(
-              productId: item.productId,
-              title: item.title,
-              imageUrl: item.imageUrl,
-              price: item.price,
-              sku: item.sku,
-            ),
-          ),
+      AppTheme.showSuccessSnackbar(
+        context,
+        '${item.title} removed from wishlist',
+        actionLabel: 'Undo',
+        onAction: () => _wishlistService.add(
+          productId: item.productId,
+          title: item.title,
+          imageUrl: item.imageUrl,
+          price: item.price,
+          sku: item.sku,
         ),
       );
     }
@@ -83,21 +72,7 @@ class _WishlistScreenState extends State<WishlistScreen> {
       sku: item.sku,
     );
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.shopping_bag_rounded, color: Colors.white, size: 16),
-              const SizedBox(width: 8),
-              Text('${item.title} added to cart!'),
-            ],
-          ),
-          backgroundColor: const Color(0xFF0066CC),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          duration: const Duration(seconds: 2),
-        ),
-      );
+      AppTheme.showSuccessSnackbar(context, '${item.title} added to cart!');
     }
   }
 
@@ -217,25 +192,12 @@ class _WishlistScreenState extends State<WishlistScreen> {
           // Product image + remove button
           Stack(
             children: [
-              ClipRRect(
+              AppNetworkImage(
+                imageUrl: item.imageUrl,
+                height: 140,
+                width: double.infinity,
+                fit: BoxFit.cover,
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
-                child: item.imageUrl.isNotEmpty
-                    ? Image.network(
-                        item.imageUrl,
-                        height: 140,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, e, s) => Container(
-                          height: 140,
-                          color: AppTheme.darkBg,
-                          child: const Icon(Icons.checkroom_rounded, color: AppTheme.textSecondary, size: 40),
-                        ),
-                      )
-                    : Container(
-                        height: 140,
-                        color: AppTheme.darkBg,
-                        child: const Icon(Icons.checkroom_rounded, color: AppTheme.textSecondary, size: 40),
-                      ),
               ),
               Positioned(
                 top: 8,

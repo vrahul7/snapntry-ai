@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../config/theme.dart';
 import '../../services/cart_service.dart';
 import '../../services/analytics_service.dart';
+import '../../widgets/app_network_image.dart';
 
 /// Full cart screen — shows all added items, quantity controls, and place order CTA.
 class CartScreen extends StatefulWidget {
@@ -85,9 +86,10 @@ class _CartScreenState extends State<CartScreen> {
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (ctx) => Container(
-        decoration: const BoxDecoration(
-          color: Color(0xFF0D1B2A),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+        decoration: BoxDecoration(
+          color: AppTheme.darkCard,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(AppTheme.radiusSheet)),
+          border: Border.all(color: AppTheme.glassBorder, width: 1.0),
         ),
         padding: const EdgeInsets.all(32),
         child: Column(
@@ -96,7 +98,7 @@ class _CartScreenState extends State<CartScreen> {
             Container(
               width: 72,
               height: 72,
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 gradient: AppTheme.instagramGradient,
                 shape: BoxShape.circle,
               ),
@@ -121,7 +123,7 @@ class _CartScreenState extends State<CartScreen> {
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 decoration: BoxDecoration(
                   gradient: AppTheme.instagramGradient,
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
                 ),
                 child: const Text(
                   'Continue Shopping',
@@ -229,27 +231,12 @@ class _CartScreenState extends State<CartScreen> {
           child: Row(
             children: [
               // Product image
-              ClipRRect(
+              AppNetworkImage(
+                imageUrl: item.imageUrl,
+                width: 90,
+                height: 100,
+                fit: BoxFit.cover,
                 borderRadius: const BorderRadius.horizontal(left: Radius.circular(15)),
-                child: item.imageUrl.isNotEmpty
-                    ? Image.network(
-                        item.imageUrl,
-                        width: 90,
-                        height: 100,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, e, s) => Container(
-                          width: 90,
-                          height: 100,
-                          color: AppTheme.darkBg,
-                          child: const Icon(Icons.checkroom_rounded, color: AppTheme.textSecondary),
-                        ),
-                      )
-                    : Container(
-                        width: 90,
-                        height: 100,
-                        color: AppTheme.darkBg,
-                        child: const Icon(Icons.checkroom_rounded, color: AppTheme.textSecondary),
-                      ),
               ),
               // Product details
               Expanded(

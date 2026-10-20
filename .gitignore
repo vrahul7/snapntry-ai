@@ -54,3 +54,7 @@ tryon_pipeline/*.jpg
 tryon_pipeline/*.jpeg
 tryon_pipeline/*.log
 
+
+# Scratch and local test scripts
+scratch/
+functions/test_imagen*

@@ -25,6 +25,9 @@ class CacheService {
       'price': p.price,
       'imageUrl': p.imageUrl,
       'sku': p.sku,
+      'productUrl': p.productUrl,
+      'gender': p.gender,
+      'brand': p.brand,
     }).toList();
     
     await _feedBox!.put('cached_catalog', serialized);
@@ -45,6 +48,9 @@ class CacheService {
         price: map['price'] ?? '',
         imageUrl: map['imageUrl'] ?? '',
         sku: map['sku'] ?? '',
+        productUrl: map['productUrl'] ?? '',
+        gender: map['gender'] ?? '',
+        brand: map['brand'] ?? '',
       );
     }).toList();
   }

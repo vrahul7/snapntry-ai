@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../config/theme.dart';
 import '../../services/try_on_state.dart';
+import '../../widgets/app_network_image.dart';
 
 /// "Complete the Look" horizontal product row displayed under the generated try-on result.
 /// Shows complementary products that pair well with the currently selected garment.
@@ -289,20 +290,12 @@ class _CompleteLookCardState extends State<_CompleteLookCard> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Product image
-            ClipRRect(
+            AppNetworkImage(
+              imageUrl: widget.imageUrl,
+              height: 110,
+              width: double.infinity,
+              fit: BoxFit.cover,
               borderRadius: const BorderRadius.vertical(top: Radius.circular(15)),
-              child: Image.network(
-                widget.imageUrl,
-                height: 110,
-                width: double.infinity,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => Container(
-                  height: 110,
-                  color: AppTheme.darkBg,
-                  child: const Icon(Icons.image_not_supported_rounded,
-                      color: AppTheme.textSecondary, size: 32),
-                ),
-              ),
             ),
             // Product info
             Padding(

@@ -77,7 +77,7 @@ class ProfileScreen extends StatelessWidget {
                   icon: Icons.shopping_bag_rounded,
                   label: 'My Cart',
                   badge: count > 0 ? '$count item${count > 1 ? 's' : ''}' : null,
-                  color: const Color(0xFF0066CC),
+                  color: AppTheme.secondaryNeon,
                   onTap: () => Navigator.pushNamed(context, '/cart'),
                 );
               },
